@@ -50,6 +50,10 @@ import scipy as sp
  		self.n2 = None
  		self.z = None
 
+ 	def createz(self, dz):
+ 		self.z = np.arange(0,self.length,dz)
+ 		self.n2 = np.zeros(np.shape(self.z))
+
 
 
 kgw = Xstal(3, 0.03, 'Yb:KGW')
@@ -57,4 +61,6 @@ kgw = Xstal(3, 0.03, 'Yb:KGW')
 
 #Spacial grid
 dz = 0.01	#in mm
-z = 
+kgw.createz(dz)
+
+
