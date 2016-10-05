@@ -119,7 +119,7 @@ def incTime_n(n, dt, Is, Ip):
 	a = s_ep*(f_p+1)*Ip/(h*v_p) + s_es*(f_s+1)*Is/(h*v_s) + 1/tau_se
 	b = nt*(s_ep*(f_p-f_s)*Ip/(h*v_p) - f_s/tau_se)
 
-	n_new = n*np.exp(-a*dt) + b/a
+	n_new = (n - b/a)*np.exp(-a*dt) + (b/a)
 
 	return n_new
 
@@ -224,11 +224,11 @@ Tr = dt   		#same as dt, just notation consistency
 
 Frep = 1E3 		#target rep rate
 Ng = 50 		# number of round trips during amp
-Ncyc = 10  		#number of cycles
-Nd = np.int((1/Frep)/(100*Tr))
+Ncyc = 1  		#number of cycles
+Nd = np.int((1/Frep)/(Tr))
 Np = Nd-Ng  	#number of rountrips during pumping phase
 
-Td = 100*Nd*Tr 		#1/Td is rep rate, needs to be integer of Tr
+Td = Nd*Tr 		#1/Td is rep rate, needs to be integer of Tr
 Tg = Ng*Tr 		#gate time
 Tp = Td - Tg  	#pumping window
 T_sim = Ncyc*Td #total simulation time window
@@ -258,7 +258,7 @@ for m in range(Np):
 
 	Ip_cur = rk4(dIp, z, Ip_0, [n])
 
-	n.val = incTime_n(n.val, 10*dt, Is_cur, Ip_cur)
+	n.val = incTime_n(n.val, dt, Is_cur, Ip_cur)
 	
 	Ip_out[:,k] = Ip_cur
 	Is_out[:,k] = Is_cur
@@ -276,13 +276,13 @@ for j in range(Ng):
 
     n.val = incTime_n(n.val, dt, Is_cur, Ip_cur)
     Is_0 = incTime_Is(Is_cur[-1], dt/2)
-    ''' 
+    
     Ip_cur = rk4(dIp, z, Ip_0, [n])
     Is_cur = np.flipud(rk4(dIs, np.flipud(z), Is_0, [n], abs_x = True))
 
     n.val = incTime_n(n.val, dt/2, Is_cur, Ip_cur)
     Is_0 = incTime_Is(Is_cur[0], dt/2)
-    '''
+    
     
     Ip_out[:,i] = Ip_cur
     Is_out[:,i] = Is_cur
