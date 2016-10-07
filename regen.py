@@ -95,14 +95,6 @@ class Xstal:
  		self.n2 = np.zeros(np.shape(self.z))
 
 
-def dn(t, Ip, Is, n):
-	'''insert dn/dt = 
-	In this case, result should be an array, same length as Ip and Is
-	'''
-	result = (s_ep*(nt*(f_p-f_s) - n*(f_p+1))*Ip/(h*v_p) 
-	         - s_es*(1+f_s)*n*Is/(h*v_s)
-	         - (n+f_s*nt)/tau_se)
-	return result
 
 def dIp(z, Ip, n):
     '''dIp/dx
@@ -110,11 +102,6 @@ def dIp(z, Ip, n):
     '''
     return ((Nt*s_ep/(1+f_s))*(n.at(z)*(1+f_p) + nt*(f_s-f_p)))*Ip
 
-def dIs(z, Is, n):
-    ''' dIs/dx 
-    n must be a func instance (see class func:)
-    '''
-    return Nt*s_es*n.at(z)*Is
 
 def dFs(z, Fs, n):
     '''dFs/dx
@@ -123,16 +110,16 @@ def dFs(z, Fs, n):
     return Nt*s_es*n.at(z)*Fs
 
 
-def incTime_n(n, dt, Is, Ip):
-    a = s_ep*(f_p+1)*Ip/(h*v_p) + s_es*(f_s+1)*Is/(h*v_s) + 1/tau_se
+def incTime_n(n, dt, Fs, Ip):
+    a = s_ep*(f_p+1)*Ip/(h*v_p) + s_es*(f_s+1)*Fs/(dt*h*v_s) + 1/tau_se
     b = nt*(s_ep*(f_p-f_s)*Ip/(h*v_p) - f_s/tau_se)
 
     n_new = (n - b/a)*np.exp(-a*dt) + (b/a)
 
     return n_new
 
-def incTime_Is(Is, dt):
-    return Is*np.exp(-alpha*dt/Tr)
+def incTime_Fs(Fs, dt):
+    return Fs*np.exp(-alpha*dt/Tr)
  
 def calcGain(z, n):
     
@@ -178,16 +165,6 @@ def rk4(f, x, y0, const_args = [], abs_x = False):
 	return y
 
 
-'''
-def intIp(z, n, Ip):
-
-	return
-
-def intIs(z, n, Is0):
-
-	int_n = sp.integrate.cumtrapz(n,z)
-	Is = Is0*np.exp(Nt*s_es*int_n)
-'''
 
 #constants
 h = 6.62606957E-34	#J*s
@@ -222,10 +199,10 @@ nt = 1 			#n1+n2, total atom density ratio == 1
 wp = 300.0E-6  		#pump beam radius, m
 ws = 300.0E-6  		#signal beam radius, m
 Pp_pump = 60.0  		#pump power (incident) in W
-Ps_seed = 1.0E-2 		#seed power in W
+Es_seed = 1.0E-6 	#seed energy in J
 
 Ip_pump = Pp_pump/(np.pi*wp**2)
-Is_seed = Ps_seed/(np.pi*ws**2)
+Fs_seed = Es_seed/(np.pi*ws**2)
 
 #Cavity parameters
 d = 1.6			#total cavity length, m
@@ -257,12 +234,12 @@ t_N = np.size(t)
 #Output variables
 n_out = np.zeros((z_N,t_N))
 Ip_out = np.zeros((z_N,t_N))
-Is_out = np.zeros((z_N,t_N))
+Fs_out = np.zeros((z_N,t_N))
 gainCoef_out = np.zeros((z_N,t_N))
 G_out = np.zeros(np.shape(t))
 
 Ip_cur = np.zeros(np.shape(z))
-Is_cur = np.zeros(np.shape(z))
+Fs_cur = np.zeros(np.shape(z))
 
 n = func()
 n.val = -f_s*nt*np.ones(np.shape(z))
@@ -275,19 +252,19 @@ G, gain_coeffs = calcGain(z, n.val)
 G_out[0] = G
 gainCoef_out[:,0] = gain_coeffs
 Ip_0 = Ip_pump
-Is_0 = 0
+Fs_0 = 0
 
 for m in range(Np):
 
     k = m
 
     Ip_cur = rk4(dIp, z, Ip_0, [n])
-    Is_cur = rk4(dIs, z, Is_0, [n])
+    Fs_cur = rk4(dFs, z, Fs_0, [n])
 
-    n.val = incTime_n(n.val, dt, Is_cur, Ip_cur)
+    n.val = incTime_n(n.val, dt, Fs_cur, Ip_cur)
 	
     Ip_out[:,k] = Ip_cur
-    Is_out[:,k] = Is_cur
+    Fs_out[:,k] = Fs_cur
     n_out[:,k+1] = n.val
     
     G, gain_coeffs = calcGain(z, n.val)
@@ -299,30 +276,30 @@ for m in range(Np):
         waitbar(m/Nd)
         
         
-Is_0 = Is_seed
+Fs_0 = Fs_seed
 
 for j in range(Ng):
 
     i = j + m + 1
 
     Ip_cur = rk4(dIp, z, Ip_0, [n])
-    Is_cur = rk4(dIs, z, Is_0, [n])
+    Fs_cur = rk4(dFs, z, Fs_0, [n])
 
-    n.val = incTime_n(n.val, dt/2, Is_cur, Ip_cur)
-    Is_cur = incTime_Is(Is_cur, dt/2)
+    n.val = incTime_n(n.val, dt/2, Fs_cur, Ip_cur)
+    Fs_cur = incTime_Fs(Fs_cur, dt/2)
     
-    Is_0 = Is_cur[-1]
+    Fs_0 = Fs_cur[-1]
 
     Ip_cur = rk4(dIp, z, Ip_0, [n])
-    Is_cur = np.flipud(rk4(dIs, np.flipud(z), Is_0, [n], abs_x = True))
+    Fs_cur = np.flipud(rk4(dFs, np.flipud(z), Fs_0, [n], abs_x = True))
 
-    n.val = incTime_n(n.val, dt/2, Is_cur, Ip_cur)
-    Is_cur = incTime_Is(Is_cur, dt/2)
+    n.val = incTime_n(n.val, dt/2, Fs_cur, Ip_cur)
+    Fs_cur = incTime_Fs(Fs_cur, dt/2)
     
-    Is_0 = Is_cur[0]    
+    Fs_0 = Fs_cur[0]    
     
     Ip_out[:,i] = Ip_cur
-    Is_out[:,i] = Is_cur
+    Fs_out[:,i] = Fs_cur
     
     if i < np.size(n_out,1)-1:
         n_out[:,i+1] = n.val
