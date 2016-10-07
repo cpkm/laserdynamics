@@ -214,21 +214,28 @@ z = np.arange(0, xstal_L+dz, dz)
 z_N = np.size(z)
 
 #Temporal grid
-dt = 2*d/c 		#roundtrip cavity time is the time step, ~10-12ns
-Tr = dt   		#same as dt, just notation consistency
-
 Frep = 1E3 		#target rep rate
 Ng = 100 		#number of round trips during amp
-Ncyc = 1  		#number of cycles
-Nd = np.int((1/Frep)/(Tr))
-Np = Nd-Ng  	#number of rountrips during pumping phase
+Ncyc = 2  		#number of cycles
+R = 10          #pumping cycle time multiplier
 
-Td = Nd*Tr 		#1/Td is rep rate, needs to be integer of Tr
-Tg = Ng*Tr 		#gate time
-Tp = Td - Tg  	#pumping window
-T_sim = Ncyc*Td #total simulation time window
+dt = 2*d/c 		#roundtrip cavity time is the time step, ~10-12ns
+Tr = dt   		#same as dt, just notation consistency
+dT = R*dt      #time spacing for pumping segment
 
-t = np.linspace(0,T_sim,Nd)
+Tdest = 1/Frep
+Tg = Ng*dt
+Tp = ((Tdest-Tg)//dT)*dT
+Np = np.int(Tp/dT)
+Td = Tp + Tg
+Nd = Np + Ng        #total calculations per cycle
+Nsim = Ncyc*Nd
+
+tcyc = np.concatenate([np.linspace(0,Tp,Np, endpoint = False), Tp+np.linspace(0,Tg,Ng, endpoint = False)])
+t = []
+for i in range(Ncyc):
+    t = np.concatenate([t,(i+1)*Td+tcyc])
+
 t_N = np.size(t)
 
 #Output variables
@@ -261,7 +268,7 @@ for m in range(Np):
     Ip_cur = rk4(dIp, z, Ip_0, [n])
     Fs_cur = rk4(dFs, z, Fs_0, [n])
 
-    n.val = incTime_n(n.val, dt, Fs_cur, Ip_cur)
+    n.val = incTime_n(n.val, dT, Fs_cur, Ip_cur)
 	
     Ip_out[:,k] = Ip_cur
     Fs_out[:,k] = Fs_cur
@@ -272,8 +279,8 @@ for m in range(Np):
     G_out[k+1] = G
     gainCoef_out[:,k+1] = gain_coeffs
     
-    if m%np.int(Nd/1000) == 0:
-        waitbar(m/Nd)
+    if m%(Nsim//1000) == 0:
+        waitbar(m/Nsim)
         
         
 Fs_0 = Fs_seed
@@ -309,8 +316,8 @@ for j in range(Ng):
     G_out[i] = G
     gainCoef_out[:,i] = gain_coeffs
     
-    if i%np.int(Nd/1000) == 0:
-        waitbar(i/Nd)
+    if i%(Nsim//1000) == 0:
+        waitbar(i/Nsim)
 
 
 
