@@ -56,7 +56,9 @@ N = Nt*n 			inversion, real density
 
 import numpy as np
 import scipy as sp
+import scipy.integrate as integrate
 import matplotlib.pyplot as plt
+import sys
 
 
 class func:
@@ -107,7 +109,7 @@ def dIp(z, Ip, n):
 	'''dIp/dx
 	n must be a func instance (see class func:)
 	'''
-	return ((Nt*s_ep/(1+f_s))*(n.at(z)*(1-f_p) + nt*(f_s-f_p)))*Ip
+	return ((Nt*s_ep/(1+f_s))*(n.at(z)*(1+f_p) + nt*(f_s-f_p)))*Ip
 
 def dIs(z, Is, n):
 	''' dIs/dx 
@@ -125,10 +127,20 @@ def incTime_n(n, dt, Is, Ip):
 
 def incTime_Is(Is, dt):
 	return Is*np.exp(-alpha*dt/Tr)
+ 
+def calcGain(z, n):
+    
+    gain_coeffs = Nt*s_es*n
+    G = np.exp(Nt*s_es*integrate.trapz(n,z))
+    
+    return G, gain_coeffs
+    
+def waitbar(progress):
+        sys.stdout.write("\rProgress: [{0:50s}] {1:.1f}%".format('#' * int(progress*50), progress*100))
+        sys.stdout.flush()
 	
 
-
-def rk4(f, x, y0, const_args = None, abs_x = False):
+def rk4(f, x, y0, const_args = [], abs_x = False):
 	'''
 	functional form
 	y'(x) = f(x,y,constants)
@@ -173,7 +185,7 @@ def intIs(z, n, Is0):
 
 #constants
 h = 6.62606957E-34	#J*s
-c = 29979245		#m/s
+c = 299792458.0		#m/s
 
 #cross sections
 s_ap = 1.2E-23;     #absorption pump, m^2
@@ -194,17 +206,17 @@ f_s = s_as/s_es
 f_p = s_ap/s_ep
 
 #parameters
-xstal_L = 3E-3	#xstal length, m
+xstal_L = 3.0E-3	#xstal length, m
 eta = 0.03		#xstal doping
 Nx = 6.3265E27	#host atom density, atoms/m**-3
 Nt = eta*Nx		#dopant atom density, atoms/m**-3
 nt = 1 			#n1+n2, total atom density ratio == 1
 
 #Beam parameters
-wp = 300E-6  		#pump beam radius, m
-ws = 300E-6  		#signal beam radius, m
-Pp_pump = 60  		#pump power (incident) in W
-Ps_seed = 1E-2 		#seed power in W
+wp = 300.0E-6  		#pump beam radius, m
+ws = 300.0E-6  		#signal beam radius, m
+Pp_pump = 60.0  		#pump power (incident) in W
+Ps_seed = 1.0E-2 		#seed power in W
 
 Ip_pump = Pp_pump/(np.pi*wp**2)
 Is_seed = Ps_seed/(np.pi*ws**2)
@@ -214,7 +226,7 @@ d = 1.6			#total cavity length, m
 alpha = 0.05	#total cavity losses, fraction (0.05 = 5%)
 
 #Spacial grid
-dz = xstal_L*0.01	#in m
+dz = xstal_L/300	#in m
 z = np.arange(0, xstal_L+dz, dz)
 z_N = np.size(z)
 
@@ -223,7 +235,7 @@ dt = 2*d/c 		#roundtrip cavity time is the time step, ~10-12ns
 Tr = dt   		#same as dt, just notation consistency
 
 Frep = 1E3 		#target rep rate
-Ng = 50 		# number of round trips during amp
+Ng = 100 		#number of round trips during amp
 Ncyc = 1  		#number of cycles
 Nd = np.int((1/Frep)/(Tr))
 Np = Nd-Ng  	#number of rountrips during pumping phase
@@ -233,60 +245,89 @@ Tg = Ng*Tr 		#gate time
 Tp = Td - Tg  	#pumping window
 T_sim = Ncyc*Td #total simulation time window
 
-t = np.arange(0,T_sim,dt)
+t = np.linspace(0,T_sim,Nd)
 t_N = np.size(t)
 
 #Output variables
 n_out = np.zeros((z_N,t_N))
 Ip_out = np.zeros((z_N,t_N))
 Is_out = np.zeros((z_N,t_N))
+gainCoef_out = np.zeros((z_N,t_N))
+G_out = np.zeros(np.shape(t))
 
 Ip_cur = np.zeros(np.shape(z))
 Is_cur = np.zeros(np.shape(z))
 
 n = func()
-n.val = -f_s*np.ones(np.shape(z))
+n.val = -f_s*nt*np.ones(np.shape(z))
 n.ind = z
 
 n_out[:,0] = n.val
+
+G, gain_coeffs = calcGain(z, n.val)
+    
+G_out[0] = G
+gainCoef_out[:,0] = gain_coeffs
 Ip_0 = Ip_pump
 Is_0 = 0
 
 for m in range(Np):
 
-	k = m
-
-	Ip_cur = rk4(dIp, z, Ip_0, [n])
-
-	n.val = incTime_n(n.val, dt, Is_cur, Ip_cur)
-	
-	Ip_out[:,k] = Ip_cur
-	Is_out[:,k] = Is_cur
-	n_out[:,k+1] = n.val
-
-
-Is_0 = Is_seed
-
-for j in range(Ng):
-
-    i = j + m
+    k = m
 
     Ip_cur = rk4(dIp, z, Ip_0, [n])
     Is_cur = rk4(dIs, z, Is_0, [n])
 
     n.val = incTime_n(n.val, dt, Is_cur, Ip_cur)
-    Is_0 = incTime_Is(Is_cur[-1], dt/2)
+	
+    Ip_out[:,k] = Ip_cur
+    Is_out[:,k] = Is_cur
+    n_out[:,k+1] = n.val
     
+    G, gain_coeffs = calcGain(z, n.val)
+    
+    G_out[k+1] = G
+    gainCoef_out[:,k+1] = gain_coeffs
+    
+    if m%np.int(Nd/1000) == 0:
+        waitbar(m/Nd)
+        
+        
+Is_0 = Is_seed
+
+for j in range(Ng):
+
+    i = j + m + 1
+
+    Ip_cur = rk4(dIp, z, Ip_0, [n])
+    Is_cur = rk4(dIs, z, Is_0, [n])
+
+    n.val = incTime_n(n.val, dt/2, Is_cur, Ip_cur)
+    Is_cur = incTime_Is(Is_cur, dt/2)
+    
+    Is_0 = Is_cur[-1]
+
     Ip_cur = rk4(dIp, z, Ip_0, [n])
     Is_cur = np.flipud(rk4(dIs, np.flipud(z), Is_0, [n], abs_x = True))
 
     n.val = incTime_n(n.val, dt/2, Is_cur, Ip_cur)
-    Is_0 = incTime_Is(Is_cur[0], dt/2)
+    Is_cur = incTime_Is(Is_cur, dt/2)
     
+    Is_0 = Is_cur[0]    
     
     Ip_out[:,i] = Ip_cur
     Is_out[:,i] = Is_cur
-    n_out[:,i+1] = n.val
+    
+    if i < np.size(n_out,1)-1:
+        n_out[:,i+1] = n.val
+    
+    G, gain_coeffs = calcGain(z, n.val)
+    
+    G_out[i] = G
+    gainCoef_out[:,i] = gain_coeffs
+    
+    if i%np.int(Nd/1000) == 0:
+        waitbar(i/Nd)
 
 
 
