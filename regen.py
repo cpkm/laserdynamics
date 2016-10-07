@@ -95,7 +95,6 @@ class Xstal:
  		self.n2 = np.zeros(np.shape(self.z))
 
 
-
 def dn(t, Ip, Is, n):
 	'''insert dn/dt = 
 	In this case, result should be an array, same length as Ip and Is
@@ -106,27 +105,34 @@ def dn(t, Ip, Is, n):
 	return result
 
 def dIp(z, Ip, n):
-	'''dIp/dx
-	n must be a func instance (see class func:)
-	'''
-	return ((Nt*s_ep/(1+f_s))*(n.at(z)*(1+f_p) + nt*(f_s-f_p)))*Ip
+    '''dIp/dx
+    n must be a func instance (see class func:)
+    '''
+    return ((Nt*s_ep/(1+f_s))*(n.at(z)*(1+f_p) + nt*(f_s-f_p)))*Ip
 
 def dIs(z, Is, n):
-	''' dIs/dx 
-	n must be a func instance (see class func:)
-	'''
-	return Nt*s_es*n.at(z)*Is
+    ''' dIs/dx 
+    n must be a func instance (see class func:)
+    '''
+    return Nt*s_es*n.at(z)*Is
+
+def dFs(z, Fs, n):
+    '''dFs/dx
+    n must be a func instance (see class func:)
+    '''
+    return Nt*s_es*n.at(z)*Fs
+
 
 def incTime_n(n, dt, Is, Ip):
-	a = s_ep*(f_p+1)*Ip/(h*v_p) + s_es*(f_s+1)*Is/(h*v_s) + 1/tau_se
-	b = nt*(s_ep*(f_p-f_s)*Ip/(h*v_p) - f_s/tau_se)
+    a = s_ep*(f_p+1)*Ip/(h*v_p) + s_es*(f_s+1)*Is/(h*v_s) + 1/tau_se
+    b = nt*(s_ep*(f_p-f_s)*Ip/(h*v_p) - f_s/tau_se)
 
-	n_new = (n - b/a)*np.exp(-a*dt) + (b/a)
+    n_new = (n - b/a)*np.exp(-a*dt) + (b/a)
 
-	return n_new
+    return n_new
 
 def incTime_Is(Is, dt):
-	return Is*np.exp(-alpha*dt/Tr)
+    return Is*np.exp(-alpha*dt/Tr)
  
 def calcGain(z, n):
     
