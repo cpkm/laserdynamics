@@ -55,24 +55,22 @@ import matplotlib.pyplot as plt
 import sys
 
 
-def rk4(f, x, y0, const_args = [], abs_x = False):
+def rk4(f, x, y0):
 	'''
 	functional form
-	y'(x) = f(x,y,constants)
+	y'(x) = f(x,y)
 
-	f must be function, f(x,y,const_args)
-	x = array
-	y0 = initial condition,
-	cont_args = additional constants required for f
+	y can be array of expressions y = y1, y2,... yn
+
+	f must be function, f(x,y,const_args), but can array of functions
+	x = array, x is differentiation variable
+	y0 = initial condition
 
 	returns y, integrated array
 	'''
 
 	N = np.size(x)
-	y = np.zeros(np.shape(x))
-	print(N,y)
-	if N>1:
-		y[0] = y0
+	y = np.zeros(np.size(y0),N)
 
 	dx = np.gradient(x)
 
@@ -80,25 +78,35 @@ def rk4(f, x, y0, const_args = [], abs_x = False):
 		dx = np.abs(dx)
 
 	for i in range(N-1):
-		k1 = f(x[i], y[i], *const_args)
-		k2 = f(x[i] + dx[i]/2, y[i] + k1*dx[i]/2, *const_args)
-		k3 = f(x[i] + dx[i]/2, y[i] + k2*dx[i]/2, *const_args)
-		k4 = f(x[i] + dx[i], y[i] + k3*dx[i], *const_args)
+		k1 = f(x[i], y[:,i])
+		k2 = f(x[i] + dx[i]/2, y[:,i] + k1*dx[i]/2)
+		k3 = f(x[i] + dx[i]/2, y[:,i] + k2*dx[i]/2)
+		k4 = f(x[i] + dx[i], y[:,i] + k3*dx[i])
 
-		y[i+1] = y[i] + (k1 + 2*k2 + 2*k3 + k4)*dx[i]/6
+		y[:,i+1] = y[:,i] + (k1 + 2*k2 + 2*k3 + k4)*dx[i]/6
 
 	return y
 
+
+def dy(t,y):
+
+	return np.array([dgHigh(t,y),dEHigh(t,y)])
 
 def g2Low(g1):
     
     return (g0 - (g0-g1)*np.exp(-(Td-Tg)/tau))
 
-def dgHigh(t, g, E):
+def dgHigh(t, y):
+    
+    g = y[0]
+    E = y[1]
 
 	return ((g0-g)/tau - g*E/(Esat*Tr))
 
-def dEHigh(t, E, g):
+def dEHigh(t, y):
+    
+    g = y[0]
+    E = y[1]
 
 	return (E*(g-l)/Tr)
 
@@ -129,12 +137,7 @@ g_cur = g2Low(g_cur)
 
 #High-Q Phase
 
-for i in range(N):
 
-	dt = Tr
-
-	E_cur = rk4(dEHigh, Tr, E_cur, [g_cur])
-	g_cur = rk4(dgHigh, Tr, g_cur, [E_cur])
 
 
 print(E_cur,g_cur)
