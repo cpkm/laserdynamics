@@ -9,7 +9,6 @@ Created on Fri Sep 30 23:19:14 2016
 REGEN dynamics simulations
  See A.L Calendron thesis (pg27), Also:
  Svelto, Principles of lasers, Ch 7
- Dorring, Opt Exp, 2004
  Pederson, J. Lightwave tech., 1991
  
  Simulation broken down into pumping time (lowQ) and amplification time (highQ)
@@ -215,9 +214,9 @@ z_N = np.size(z)
 
 #Temporal grid
 Frep = 1E3 		#target rep rate
-Ng = 100 		#number of round trips during amp
-Ncyc = 2  		#number of cycles
-R = 10          #pumping cycle time multiplier
+Ng = 30 		#number of round trips during amp
+Ncyc = 10  		#number of cycles
+R = 100          #pumping cycle time multiplier
 
 dt = 2*d/c 		#roundtrip cavity time is the time step, ~10-12ns
 Tr = dt   		#same as dt, just notation consistency
@@ -253,71 +252,73 @@ n.val = -f_s*nt*np.ones(np.shape(z))
 n.ind = z
 
 n_out[:,0] = n.val
-
 G, gain_coeffs = calcGain(z, n.val)
-    
 G_out[0] = G
 gainCoef_out[:,0] = gain_coeffs
-Ip_0 = Ip_pump
-Fs_0 = 0
 
-for m in range(Np):
 
-    k = m
-
-    Ip_cur = rk4(dIp, z, Ip_0, [n])
-    Fs_cur = rk4(dFs, z, Fs_0, [n])
-
-    n.val = incTime_n(n.val, dT, Fs_cur, Ip_cur)
-	
-    Ip_out[:,k] = Ip_cur
-    Fs_out[:,k] = Fs_cur
-    n_out[:,k+1] = n.val
+for k in range(Ncyc):
     
-    G, gain_coeffs = calcGain(z, n.val)
-    
-    G_out[k+1] = G
-    gainCoef_out[:,k+1] = gain_coeffs
-    
-    if m%(Nsim//1000) == 0:
-        waitbar(m/Nsim)
+    Ip_0 = Ip_pump
+    Fs_0 = 0
+
+    for j in range(Np):
+
+        m = j + k*Nd
+
+        Ip_cur = rk4(dIp, z, Ip_0, [n])
+        Fs_cur = rk4(dFs, z, Fs_0, [n])
+
+        n.val = incTime_n(n.val, dT, Fs_cur, Ip_cur)
+    	
+        Ip_out[:,m] = Ip_cur
+        Fs_out[:,m] = Fs_cur
+        n_out[:,m+1] = n.val
         
+        G, gain_coeffs = calcGain(z, n.val)
         
-Fs_0 = Fs_seed
+        G_out[m+1] = G
+        gainCoef_out[:,m+1] = gain_coeffs
+        
+        if m%(Nsim//1000) == 0:
+            waitbar(m/Nsim)
+            
+            
+    Fs_0 = Fs_seed
 
-for j in range(Ng):
+    for i in range(Ng):
 
-    i = j + m + 1
+        q = i + Np + k*Nd
 
-    Ip_cur = rk4(dIp, z, Ip_0, [n])
-    Fs_cur = rk4(dFs, z, Fs_0, [n])
+        Ip_cur = rk4(dIp, z, Ip_0, [n])
+        Fs_cur = rk4(dFs, z, Fs_0, [n])
 
-    n.val = incTime_n(n.val, dt/2, Fs_cur, Ip_cur)
-    Fs_cur = incTime_Fs(Fs_cur, dt/2)
-    
-    Fs_0 = Fs_cur[-1]
+        n.val = incTime_n(n.val, dt/2, Fs_cur, Ip_cur)
+        Fs_cur = incTime_Fs(Fs_cur, dt/2)
+        
+        Fs_0 = Fs_cur[-1]
 
-    Ip_cur = rk4(dIp, z, Ip_0, [n])
-    Fs_cur = np.flipud(rk4(dFs, np.flipud(z), Fs_0, [n], abs_x = True))
+        Ip_cur = rk4(dIp, z, Ip_0, [n])
+        Fs_cur = np.flipud(rk4(dFs, np.flipud(z), Fs_0, [n], abs_x = True))
 
-    n.val = incTime_n(n.val, dt/2, Fs_cur, Ip_cur)
-    Fs_cur = incTime_Fs(Fs_cur, dt/2)
-    
-    Fs_0 = Fs_cur[0]    
-    
-    Ip_out[:,i] = Ip_cur
-    Fs_out[:,i] = Fs_cur
-    
-    if i < np.size(n_out,1)-1:
-        n_out[:,i+1] = n.val
-    
-    G, gain_coeffs = calcGain(z, n.val)
-    
-    G_out[i] = G
-    gainCoef_out[:,i] = gain_coeffs
-    
-    if i%(Nsim//1000) == 0:
-        waitbar(i/Nsim)
+        n.val = incTime_n(n.val, dt/2, Fs_cur, Ip_cur)
+        Fs_cur = incTime_Fs(Fs_cur, dt/2)
+        
+        Fs_0 = Fs_cur[0]    
+        
+        Ip_out[:,q] = Ip_cur
+        Fs_out[:,q] = Fs_cur
+        
+        if q < np.size(n_out,1)-1:
+            n_out[:,q+1] = n.val
+        
+        G, gain_coeffs = calcGain(z, n.val)
+        
+        G_out[q] = G
+        gainCoef_out[:,q] = gain_coeffs
+        
+        if q%(Nsim//1000) == 0:
+            waitbar(q/Nsim)
 
 
 
