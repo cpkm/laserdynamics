@@ -13,7 +13,29 @@ import sys
 import inspect
 
 
-#%%
+
+class Pulse:
+
+    T_BIT_DEFAULT = 12      #default time resolution
+    T_WIN_DEFAULT = 20E-12  #default window size
+
+    def __init__(self):
+        self.time = None
+        self.freq = None
+        self.At = None
+        self.Af = None
+
+
+    def initializeGrid(self, t_bit_res, t_window):
+        nt = 2**t_bit_res    #number of time steps, power of 2 for FFT
+        dtau = 2*t_window/nt    #time step size
+
+        self.time = dtau*np.arange(-nt//2, nt//2)       #time array
+        self.freq = 2*np.pi*np.fft.fftfreq(nt,dtau)     #frequency array
+
+
+
+
 def propagate(tau, inputField, lengthFib, alpha, gamma, beta):
     '''This function will propagate the input field along the length of...
     a fibre with the given properties...
