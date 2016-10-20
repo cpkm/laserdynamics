@@ -34,6 +34,59 @@ class Pulse:
         self.freq = 2*np.pi*np.fft.fftfreq(nt,dtau)     #frequency array
 
 
+class Fiber:
+    '''
+    Defines a Fiber opbject
+    .length = length of fiber (m)
+    .alpha = loss coefficient (m^-1)
+    .beta = dispersion parameters, 2nd 3rd 4th order. array
+    .gamma = nonlinear parameter, (W*m)^-1
+
+    .z is the z-axis array for the fiber
+
+    grid_type specifies whether the z-grid is defined by the grid spacing ('abs' or absolute), or number of points ('rel' or relative)
+    z_grid is either the grid spacing (abs) or number of grid points (rel)
+
+    '''
+
+    Z_STP_DEFAULT = 0.003  #default grid size, in m
+    Z_NUM_DEFAULT = 300     #default number of grid points
+
+    def __init__(self, length = 0, alpha = 0, beta = np.array([0,0,0]), gamma = 0, grid_type = 'abs', z_grid = None):
+
+        self.length = length
+        self.alpha = alpha
+        self.beta = beta
+        self.gamma = gamma
+
+        self.initializeGrid(self.length, grid_type, z_grid)
+
+    def initializeGrid(self, length, grid_type = 'abs', z_grid = None):
+        '''
+        -sets up the z-axis array for the fiber
+        -can be called and re-called at any time (even after creation)
+        -must provide fiber length, self.length is redefined when initializeGrid is called
+        '''
+
+        self.length = length
+
+        if grid_type.lower() == 'abs':
+            #grid type is 'absolute', z_grid is grid spacing
+            if z_grid == None:
+                z_grid = Z_STP_DEFAULT
+
+            nz = self.length//z_grid
+            self.z = z_grid*np.arange(0, nz)    #position array
+
+        else:
+            # grid type is 'relative', z_grid is number of grid points
+            if z_grid == None:
+                z_grid = Z_NUM_DEFAULT
+
+            dz = self.length/z_grid   #position step size
+            self.z = dz*np.arange(0, nz)    #position array
+
+
 
 
 def propagate(tau, inputField, lengthFib, alpha, gamma, beta):
