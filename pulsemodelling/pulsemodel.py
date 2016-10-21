@@ -13,18 +13,33 @@ import sys
 import inspect
 
 
+#constants
+h = 6.62606957E-34  #J*s
+c = 299792458.0     #m/s
+
 
 class Pulse:
+    '''
+    Defines a Pulse object
+    .time = time array (s)
+    .freq = corresponding angular freq array (rad/s)
+    .At = time domain Field
+    .Af = freq domain Field
+
+    Note: At should be used as the primary field. Af should only be reference. 
+    Any time field is modified it should be stored as At. Then use getAf() to get current freq domain field.
+
+    '''
 
     T_BIT_DEFAULT = 12      #default time resolution
     T_WIN_DEFAULT = 20E-12  #default window size
 
-    def __init__(self):
+    def __init__(self, lambda0 = 1.030E-6):
         self.time = None
         self.freq = None
         self.At = None
         self.Af = None
-
+        self.lambda0 = lambda0
 
     def initializeGrid(self, t_bit_res, t_window):
         nt = 2**t_bit_res    #number of time steps, power of 2 for FFT
@@ -32,6 +47,28 @@ class Pulse:
 
         self.time = dtau*np.arange(-nt//2, nt//2)       #time array
         self.freq = 2*np.pi*np.fft.fftfreq(nt,dtau)     #frequency array
+
+    def getAf(self):
+        return np.fft.ifft(self.At)
+
+    def copyPulse(self, new_At = None):
+        '''
+        Duplicates pulse, outputs new pulse instance
+        Can set new At at same time by sending new_At. If not sent, new_pulse.At is same
+        '''
+
+        new_pulse = Pulse()
+        new_pulse.time = self.time
+        new_pulse.freq = self.freq
+
+        if new_At == None:
+            new_pulse.At = self.At
+        else:
+            new_pulse.At = new_At
+
+        new_pulse.Af = np.fft.ifft(self.At)
+
+        return new_pulse
 
 
 class Fiber:
@@ -44,7 +81,8 @@ class Fiber:
 
     .z is the z-axis array for the fiber
 
-    grid_type specifies whether the z-grid is defined by the grid spacing ('abs' or absolute), or number of points ('rel' or relative)
+    grid_type specifies whether the z-grid is defined by the grid spacing ('abs' or absolute),
+    or number of points ('rel' or relative)
     z_grid is either the grid spacing (abs) or number of grid points (rel)
 
     '''
@@ -85,6 +123,136 @@ class Fiber:
 
             dz = self.length/z_grid   #position step size
             self.z = dz*np.arange(0, nz)    #position array
+
+
+
+def gratingPair(pulse, L, d, theta, loss = 0):
+    '''
+    Simulate grating pair
+    pulse = input pulse object
+    L = grating separation (m)
+    d = groove spacing (m) of gratings
+    theta = angle of incidence (rad)
+    loss = %loss of INTENSITY (not field)
+
+    returns time-domain output field
+
+    '''
+
+    Af = pulse.getAf()
+    w = pulse.freq + 2*np.pi*c/pulse.lambda0
+
+    phi2 = (-2*2*(np.pi**2)*L*c/(d**2*w**3))*(1-(2*np.pi*c/(d*w) - np.sin(theta))**2)**(-3/2)
+    phi3 = (12*(np.pi**2)*c*L/(d**2*w**4*(np.cos(theta))**3))*(1+((2*np.pi*c*np.sin(theta))/(w*d*(np.cos(theta))**2)))
+
+    output_At = np.sqrt(1-loss)*np.fft.fft(Af*np.exp(-1j*(phi2*w**2/2 + phi3*w**3/6)))
+    
+    return output_At
+
+
+def powerTap(pulse, tap, loss = 0):
+    '''
+    Simulate splitter or tap
+    tap is 'output', 'signal' is to cavity. Just semantics though
+    signal pulse is (1-tap)
+
+    pulse = input pulse
+    tap = tap ratio, ex. 1 == 1%, 50 = %50
+    loss = % loss
+
+    tap and loss ratios are of INTENSITY, not field
+
+    Note: tap and signal are 'dephased', differ by factor of i. This is how these work in real life
+    
+    '''
+
+    At = np.sqrt(1-loss)*pulse.At
+    output_tap = 1j*np.sqrt(tap/100)*At
+    output_signal = np.sqrt(1-tap/100)*At
+
+    return output_signal, output_tap
+
+def coupler2x2(pulse1, pulse2, tap, loss = 0):
+    '''Simulates splitter/coupler
+    requires 2 pulses, outputs 2 pulses.
+    should be able to send 'null pulse' in out terminal to sim single input
+
+    B(pulse2)-----[=======]-----SignalA, tapB
+                  [==2x2==]
+    A(pulse1)-----[=======]-----SignalB, tapA
+
+    pulse1 goes to output_sig with (1-tap)
+    pulse1 goes to output_tap with tap
+    pulse2 goes to output_tap with tap
+    pulse2 goes to output_sig with (1-tap)
+    '''
+
+    At1 = np.sqrt(1-loss)*pulse1.At
+    At2 = np.sqrt(1-loss)*pulse2.At
+
+    output_signal = np.sqrt(1-tap/100)*At1 + 1j*np.sqrt(tap/100)*At2
+    output_tap = np.sqrt(1-tap/100)*At2 + 1j*np.sqrt(tap/100)*At1
+
+    return output_signal, output_tap
+
+
+def filter(pulse, filter_type, lambda0 = None, bandwidth = 2E-9, loss = 0):
+    '''
+    Simulate filter, bandpass, longpass, shortpass
+    default bandwidth is 2nm
+
+    pulse.lambda0 = central wavelength of PULSE
+    lambda0 = central wavelength of FILTER
+    w0 is central freq (ang) of FILTER
+    '''
+    
+    Af = pulse.getAf()
+
+    if lambda0 == None:
+        lambda0 = pulse.lambda0
+
+    w = pulse.freq + 2*np.pi*c/pulse.lambda0
+    w0 = 2*np,pi*c/lambda0
+
+    if filter_type.lower() == 'lpf':
+        '''
+        long-pass, pass low freq
+        w0-w is (+) for w<w0 (pass region)
+        '''
+        filter = 0.5 * (np.sign(w0-w) + 1)
+
+    elif filter_type.lower() == 'spf':
+        '''
+        short-pass, pass high freq
+        w-w0 is (+) for w>w0 (pass region)
+        '''
+        filter = 0.5 * (np.sign(w-w0) + 1)
+
+    elif filter_type.lower() == 'bpf':
+        '''
+        bandpass
+        '''
+        #prevent divide by 0
+        if bandwidth == 0:
+            bandwidth = 2E-9
+
+        dw = w0*(bandwidth/lambda0)
+
+        filter = (0.5 * (np.sign(w0-w+dw) + 1))*(0.5 * (np.sign(w-w0-dw) + 1))
+
+    else:
+        '''
+        if no filter is specified, only losses are applied (filter is == 1 for all freq)
+        '''
+        filter = np.ones(np.shape(w))
+
+    output_At = np.sqrt(1-loss)*np.fft.fft(Af*filter)
+
+    return output_At
+
+
+
+
 
 
 
