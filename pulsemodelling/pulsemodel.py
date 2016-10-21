@@ -111,18 +111,18 @@ class Fiber:
         if grid_type.lower() == 'abs':
             #grid type is 'absolute', z_grid is grid spacing
             if z_grid == None:
-                z_grid = Z_STP_DEFAULT
+                z_grid = self.Z_STP_DEFAULT 
 
             nz = self.length//z_grid
             self.z = z_grid*np.arange(0, nz)    #position array
 
         else:
             # grid type is 'relative', z_grid is number of grid points
-            if z_grid == None:
-                z_grid = Z_NUM_DEFAULT
+            if z_grid == None or z_grid < 1:
+                z_grid = self.Z_NUM_DEFAULT
 
             dz = self.length/z_grid   #position step size
-            self.z = dz*np.arange(0, nz)    #position array
+            self.z = dz*np.arange(0, z_grid)    #position array
 
 
 
@@ -140,12 +140,13 @@ def gratingPair(pulse, L, d, theta, loss = 0):
     '''
 
     Af = pulse.getAf()
-    w = pulse.freq + 2*np.pi*c/pulse.lambda0
+    w0 = 2*np.pi*c/pulse.lambda0
+    w = pulse.freq + w0
 
     phi2 = (-2*2*(np.pi**2)*L*c/(d**2*w**3))*(1-(2*np.pi*c/(d*w) - np.sin(theta))**2)**(-3/2)
     phi3 = (12*(np.pi**2)*c*L/(d**2*w**4*(np.cos(theta))**3))*(1+((2*np.pi*c*np.sin(theta))/(w*d*(np.cos(theta))**2)))
 
-    output_At = np.sqrt(1-loss)*np.fft.fft(Af*np.exp(-1j*(phi2*w**2/2 + phi3*w**3/6)))
+    output_At = np.sqrt(1-loss)*np.fft.fft(Af*np.exp(-1j*(phi2*(w-w0)**2/2 + phi3*(w-w0)**3/6)))
     
     return output_At
 
@@ -212,7 +213,7 @@ def filter(pulse, filter_type, lambda0 = None, bandwidth = 2E-9, loss = 0):
         lambda0 = pulse.lambda0
 
     w = pulse.freq + 2*np.pi*c/pulse.lambda0
-    w0 = 2*np,pi*c/lambda0
+    w0 = 2*np.pi*c/lambda0
 
     if filter_type.lower() == 'lpf':
         '''
@@ -238,14 +239,14 @@ def filter(pulse, filter_type, lambda0 = None, bandwidth = 2E-9, loss = 0):
 
         dw = w0*(bandwidth/lambda0)
 
-        filter = (0.5 * (np.sign(w0-w+dw) + 1))*(0.5 * (np.sign(w-w0-dw) + 1))
+        filter = (0.5 * (np.sign(w0-w+dw/2) + 1))*(0.5 * (np.sign(w-w0+dw/2) + 1))
 
     else:
         '''
         if no filter is specified, only losses are applied (filter is == 1 for all freq)
         '''
         filter = np.ones(np.shape(w))
-
+        
     output_At = np.sqrt(1-loss)*np.fft.fft(Af*filter)
 
     return output_At
@@ -393,6 +394,8 @@ def rmswidth(x,F):
 
 
 #%%
+'''
+
 plt.ion()                            # Turned on Matplotlib's interactive mode
 #
 
@@ -472,3 +475,4 @@ plt.figlegend((t_input,t_output), ('Input', 'Output'), 'center right')
 #Pulse stats
 [pulseCenter, pulseWidth] = rmswidth(tau, np.abs(Atplot)**2)
 print(pulseCenter, pulseWidth)
+'''
