@@ -77,7 +77,8 @@ class Fiber:
     .length = length of fiber (m)
     .alpha = loss coefficient (m^-1)
     .beta = dispersion parameters, 2nd 3rd 4th order. array
-    .gamma = nonlinear parameter, (W*m)^-1
+    .gamma = nonlinear parameter, (W*m)^-1\
+    .gain = fiber gain coefficient (m^-1), same units as alpha, can be z-array or constant
 
     .z is the z-axis array for the fiber
 
@@ -90,12 +91,18 @@ class Fiber:
     Z_STP_DEFAULT = 0.003  #default grid size, in m
     Z_NUM_DEFAULT = 300     #default number of grid points
 
-    def __init__(self, length = 0, alpha = 0, beta = np.array([0,0,0]), gamma = 0, grid_type = 'abs', z_grid = None):
+    def __init__(self, length = 0, alpha = 0, beta = np.array([0,0,0]), gamma = 0, gain = 0, grid_type = 'abs', z_grid = None):
 
         self.length = length
         self.alpha = alpha
         self.beta = beta
         self.gamma = gamma
+        self.gain = gain
+
+        self.sigma_a = np.zeros((2,2))
+        self.sigma_e = np.zeros((2,2))
+
+        self.tau = 1
 
         self.initializeGrid(self.length, grid_type, z_grid)
 
@@ -123,6 +130,42 @@ class Fiber:
 
             dz = self.length/z_grid   #position step size
             self.z = dz*np.arange(0, z_grid)    #position array
+
+
+def calcGain(fiber, Ip, Is):
+    '''
+    Calculate steady state gain over fiber
+    Output z-array of gain
+    '''
+    s_ap = fiber.sigma_a[0,1]
+    s_as = fiber.sigma_a[1,1]
+
+    s_ep = fiber.sigma_e[0,1]
+    s_es = fiber.sigma_e[1,1]
+
+    v_p = fiber.sigma_a[0,0]
+    v_s = fiber.sigma_e[1,0]
+
+    b_p = (s_ap + s_ep)/(h*v_p)
+    b_s = (s_as + s_es)/(h*v_s)
+    a_p = s_ap/(h*v_p)
+    a_s = s_as/(h*v_s)
+
+    tau_se = fiber.tau
+
+    g = np.zeros(np.shape(fiber.z))
+
+
+    for i in range(np.size(g)):
+
+        n = (a_p*Ip + a_s*Is)/(b_p*Ip + b_s*Is + 1/tau_se)
+        
+        Ip = Ip*np.exp(-(s_ap*N*(1-n) - s_ep*N*n)*dz)
+        Is = Is*np.exp(-(s_as*N*(1-n) - s_es*N*n)*dz) + n*h*v_s*N*dz/tau_se
+
+        g[i] = (s_es*N*n - s_as*N*(1-n))
+
+    return g
 
 
 
