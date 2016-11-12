@@ -38,8 +38,8 @@ class Pulse:
 
     '''
 
-    T_BIT_DEFAULT = 12      #default time resolution
-    T_WIN_DEFAULT = 20E-12  #default window size
+    T_BIT_DEFAULT = 12      #default time resolution, 2^12
+    T_WIN_DEFAULT = 20E-12  #default window size, 20ps
 
     def __init__(self, lambda0 = 1.030E-6):
         self.time = None
@@ -100,21 +100,21 @@ class Fiber:
 
     '''
 
-    Z_STP_DEFAULT = 0.003  #default grid size, in m
-    Z_NUM_DEFAULT = 300     #default number of grid points
+    Z_STP_DEFAULT = 0.003  #default grid size, in m, 3mm
+    Z_NUM_DEFAULT = 300     #default number of grid points, 300
 
     CORE_D_DEFAULT = 6E-6    #default core diameter, 6um
     CLAD_D_DEFAULT = 125E-6  #default clad diameter, 125um
 
-    def __init__(self, length = 0, grid_type = 'abs', z_grid = None,  alpha = 0, beta = np.array([0,0,0]), gamma = 0, ):
+    def __init__(self, length = 0, grid_type = 'abs', z_grid = None,  alpha = 0, beta = np.array([0,0,0]), gamma = 0):
 
         self.length = length
         self.alpha = alpha
         self.beta = beta
         self.gamma = gamma
 
-        self.core_d = CORE_D_DEFAULT
-        self.clad_d = CLAD_D_DEFAULT
+        self.core_d = self.CORE_D_DEFAULT
+        self.clad_d = self.CLAD_D_DEFAULT
 
         self.initializeGrid(self.length, grid_type, z_grid)
 
@@ -186,8 +186,8 @@ class FiberGain:
         self.tau = 770E-6
         self.N = 7.1175E25
 
-        self.core_d = CORE_D_DEFAULT
-        self.clad_d = CLAD_D_DEFAULT
+        self.core_d = self.CORE_D_DEFAULT
+        self.clad_d = self.CLAD_D_DEFAULT
 
         self.initializeGrid(self.length, grid_type, z_grid)
 
@@ -435,6 +435,11 @@ def opticalFilter(pulse, filter_type, lambda0 = None, bandwidth = 2E-9, loss = 0
 def propagateFiber  (pulse, fiber):
     '''This function will propagate the input field along the length of...
     a fibre with the given properties...
+
+    # Pulse propagation via Nonlinear Schrodinger Equation (NLSE)
+    # dA/dz = -ib2/2 (d^2A/dtau^2) + b3/6 (d^3 A/dtau^3) -aplha/2 + ig|A|^2*A  
+    # --> A is field A = sqrt(P0)*u
+
    Requires a Pulse class object and Fiber class object. Fiber can also be FiberGain class
 
    Inputs:
