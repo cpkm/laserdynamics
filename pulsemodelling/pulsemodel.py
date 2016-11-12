@@ -3,6 +3,12 @@
 Created on Fri Jul 11 15:09:06 2014
 
 @author: cpkmanchee
+
+Notes:
+
+- classes of Pulse, Fiber, and FiberGain poses all the parameters required for th einput of most functions
+- functions should not change class object parameters; instead they should return a value which can be used to 
+change the object's parameters in the primary script 
 """
 
 import numpy as np
@@ -25,6 +31,7 @@ class Pulse:
     .freq = corresponding angular freq array (rad/s)
     .At = time domain Field
     .Af = freq domain Field
+    .lambda0 = central wavelength of pulse
 
     Note: At should be used as the primary field. Af should only be reference. 
     Any time field is modified it should be stored as At. Then use getAf() to get current freq domain field.
@@ -38,7 +45,6 @@ class Pulse:
         self.time = None
         self.freq = None
         self.At = None
-        self.Af = None
         self.lambda0 = lambda0
 
     def initializeGrid(self, t_bit_res, t_window):
@@ -47,6 +53,8 @@ class Pulse:
 
         self.time = dtau*np.arange(-nt//2, nt//2)       #time array
         self.freq = 2*np.pi*np.fft.fftfreq(nt,dtau)     #frequency array
+        self.nt = nt
+        self.dt = dtau
 
     def getAf(self):
         return np.fft.ifft(self.At)
@@ -57,16 +65,16 @@ class Pulse:
         Can set new At at same time by sending new_At. If not sent, new_pulse.At is same
         '''
 
-        new_pulse = Pulse()
+        new_pulse = Pulse(self.lambda0)
         new_pulse.time = self.time
         new_pulse.freq = self.freq
+        new_pulse.nt = self.nt
+        new_pulse.dt = self.dt
 
         if new_At == None:
             new_pulse.At = self.At
         else:
             new_pulse.At = new_At
-
-        new_pulse.Af = np.fft.ifft(self.At)
 
         return new_pulse
 
@@ -75,10 +83,11 @@ class Fiber:
     '''
     Defines a Fiber opbject
     .length = length of fiber (m)
-    .alpha = loss coefficient (m^-1)
+    .alpha = loss coefficient (m^-1), +alpha means loss
     .beta = dispersion parameters, 2nd 3rd 4th order. array
     .gamma = nonlinear parameter, (W*m)^-1\
-    .gain = fiber gain coefficient (m^-1), same units as alpha, can be z-array or constant
+    
+    can be used for simple gain fiber by using alpha (-alpha = gain-loss)
 
     .z is the z-axis array for the fiber
 
@@ -91,18 +100,12 @@ class Fiber:
     Z_STP_DEFAULT = 0.003  #default grid size, in m
     Z_NUM_DEFAULT = 300     #default number of grid points
 
-    def __init__(self, length = 0, alpha = 0, beta = np.array([0,0,0]), gamma = 0, gain = 0, grid_type = 'abs', z_grid = None):
+    def __init__(self, length = 0, alpha = 0, beta = np.array([0,0,0]), gamma = 0, grid_type = 'abs', z_grid = None):
 
         self.length = length
         self.alpha = alpha
         self.beta = beta
         self.gamma = gamma
-        self.gain = gain
-
-        self.sigma_a = np.zeros((2,2))
-        self.sigma_e = np.zeros((2,2))
-
-        self.tau = 1
 
         self.initializeGrid(self.length, grid_type, z_grid)
 
@@ -132,10 +135,125 @@ class Fiber:
             self.z = dz*np.arange(0, z_grid)    #position array
 
 
+class FiberGain:
+    '''
+    Defines a gain Fiber object with gain parameters
+    .length = length of fiber (m)
+    .alpha = loss coefficient (m^-1)
+    .beta = dispersion parameters, 2nd 3rd 4th order. array
+    .gamma = nonlinear parameter, (W*m)^-1\
+    .gain = fiber gain coefficient (m^-1), same units as alpha, can be z-array or constant
+    
+    .sigma_x are 2x2 arrays. col 0 = wavelength, col 1 = sigma, row 0 = pump, row 1= signal
+    .tau is excited state lifetime
+    .z is the z-axis array for the fiber
+
+    grid_type specifies whether the z-grid is defined by the grid spacing ('abs' or absolute),
+    or number of points ('rel' or relative)
+    z_grid is either the grid spacing (abs) or number of grid points (rel)
+
+    '''
+
+    Z_STP_DEFAULT = 0.003  #default grid size, in m
+    Z_NUM_DEFAULT = 300     #default number of grid points
+
+    def __init__(self, length = 0, alpha = 0, beta = np.array([0,0,0]), gamma = 0, gain = 0, grid_type = 'abs', z_grid = None):
+
+        self.length = length
+        self.alpha = alpha
+        self.beta = beta
+        self.gamma = gamma
+        self.gain = gain
+
+        self.sigma_a = np.zeros((2,2))
+        self.sigma_e = np.zeros((2,2))
+
+        self.tau = 770E-6
+        self.N = 7.1175E25
+
+        self.initializeGrid(self.length, grid_type, z_grid)
+
+
+    def initializeGrid(self, length, grid_type = 'abs', z_grid = None):
+        '''
+        -sets up the z-axis array for the fiber
+        -can be called and re-called at any time (even after creation)
+        -must provide fiber length, self.length is redefined when initializeGrid is called
+        '''
+
+        self.length = length
+
+        if grid_type.lower() == 'abs':
+            #grid type is 'absolute', z_grid is grid spacing
+            if z_grid == None:
+                z_grid = self.Z_STP_DEFAULT 
+
+            nz = self.length//z_grid
+            self.z = z_grid*np.arange(0, nz)    #position array
+
+        else:
+            # grid type is 'relative', z_grid is number of grid points
+            if z_grid == None or z_grid < 1:
+                z_grid = self.Z_NUM_DEFAULT
+
+            dz = self.length/z_grid   #position step size
+            self.z = dz*np.arange(0, z_grid)    #position array
+
+
+
+def checkInput(inputData, requiredType, *inputNum):
+    
+    if len(inputNum)==1:
+        number = inputNum[0]
+    else:
+        number = '#'
+
+    if not(isinstance(inputData, eval(requiredType))):
+        errMsg = 'Input ' + str(number) + ' is type ' + str(type(inputData)) + '\nRequired:' + ' \'' + str(requiredType) + '\'\n' 
+    else:
+        errMsg = -1
+    
+    return(errMsg)
+
+
+def rmswidth(x,F):
+    
+    if isinstance(x, np.ndarray):
+        pass
+    else:
+        x = np.asarray(x)
+    
+    if isinstance(F, np.ndarray):
+        pass
+    else:
+        F = np.asarray(F)
+        
+    dx = np.gradient(x)
+    
+    #Normalization integration
+    areaF=0
+    for i in range(len(x)):
+        areaF += dx[i]*F[i]
+
+    #Average value
+    mu=0
+    for i in range(len(x)):
+        mu += x[i]*F[i]*dx[i]/areaF
+
+    #Varience (sd = sqrt(var))
+    var = 0
+    for i in range(len(x)):
+        var += dx[i]*F[i]*(x[i]-mu)**2/areaF
+    
+    #returns avg and rms width
+    return(mu, np.sqrt(var))
+
+
 def calcGain(fiber, Ip, Is):
     '''
     Calculate steady state gain over fiber
     Output z-array of gain
+    fiber.sigma_x are 2x2 arrays. col 0 = wavelength, col 1 = sigma, row 0 = pump, row 1= signal
     '''
     s_ap = fiber.sigma_a[0,1]
     s_as = fiber.sigma_a[1,1]
@@ -154,19 +272,19 @@ def calcGain(fiber, Ip, Is):
     tau_se = fiber.tau
 
     g = np.zeros(np.shape(fiber.z))
-
+    N=fiber.N
+    dz = np.gradient(fiber.z)
 
     for i in range(np.size(g)):
 
         n = (a_p*Ip + a_s*Is)/(b_p*Ip + b_s*Is + 1/tau_se)
         
-        Ip = Ip*np.exp(-(s_ap*N*(1-n) - s_ep*N*n)*dz)
-        Is = Is*np.exp(-(s_as*N*(1-n) - s_es*N*n)*dz) + n*h*v_s*N*dz/tau_se
+        Ip = Ip*np.exp(-(s_ap*N*(1-n) - s_ep*N*n)*dz[i])
+        Is = Is*np.exp(-(s_as*N*(1-n) - s_es*N*n)*dz[i]) + n*h*v_s*N*dz[i]/tau_se
 
         g[i] = (s_es*N*n - s_as*N*(1-n))
 
     return g
-
 
 
 def gratingPair(pulse, L, d, theta, loss = 0):
@@ -216,6 +334,7 @@ def powerTap(pulse, tap, loss = 0):
 
     return output_signal, output_tap
 
+
 def coupler2x2(pulse1, pulse2, tap, loss = 0):
     '''Simulates splitter/coupler
     requires 2 pulses, outputs 2 pulses.
@@ -240,7 +359,7 @@ def coupler2x2(pulse1, pulse2, tap, loss = 0):
     return output_signal, output_tap
 
 
-def filter(pulse, filter_type, lambda0 = None, bandwidth = 2E-9, loss = 0):
+def opticalFilter(pulse, filter_type, lambda0 = None, bandwidth = 2E-9, loss = 0):
     '''
     Simulate filter, bandpass, longpass, shortpass
     default bandwidth is 2nm
@@ -263,14 +382,14 @@ def filter(pulse, filter_type, lambda0 = None, bandwidth = 2E-9, loss = 0):
         long-pass, pass low freq
         w0-w is (+) for w<w0 (pass region)
         '''
-        filter = 0.5 * (np.sign(w0-w) + 1)
+        filter_profile = 0.5 * (np.sign(w0-w) + 1)
 
     elif filter_type.lower() == 'spf':
         '''
         short-pass, pass high freq
         w-w0 is (+) for w>w0 (pass region)
         '''
-        filter = 0.5 * (np.sign(w-w0) + 1)
+        filter_profile = 0.5 * (np.sign(w-w0) + 1)
 
     elif filter_type.lower() == 'bpf':
         '''
@@ -282,158 +401,93 @@ def filter(pulse, filter_type, lambda0 = None, bandwidth = 2E-9, loss = 0):
 
         dw = w0*(bandwidth/lambda0)
 
-        filter = (0.5 * (np.sign(w0-w+dw/2) + 1))*(0.5 * (np.sign(w-w0+dw/2) + 1))
+        filter_profile = (0.5 * (np.sign(w0-w+dw/2) + 1))*(0.5 * (np.sign(w-w0+dw/2) + 1))
 
     else:
         '''
         if no filter is specified, only losses are applied (filter is == 1 for all freq)
         '''
-        filter = np.ones(np.shape(w))
+        filter_profile = np.ones(np.shape(w))
         
-    output_At = np.sqrt(1-loss)*np.fft.fft(Af*filter)
+    output_At = np.sqrt(1-loss)*np.fft.fft(Af*filter_profile)
 
     return output_At
 
 
-
-
-
-
-
-
-def propagate(tau, inputField, lengthFib, alpha, gamma, beta):
+def propagateFiber  (pulse, fiber, gain_calc = False):
     '''This function will propagate the input field along the length of...
     a fibre with the given properties...
-    tau = time points...
-    inputField = time domain input field...
-    lengthFib = fibre length...
-    alpha = fibre loss parameter...
-    gamma = nonlinear parameter...
-    beta = dispersion parameters'''
-    function_name = sys._getframe().f_code.co_name   
+   Requires a Pulse class object and Fiber class object. Fiber can also be FiberGain class
+    function_name = sys._getframe().f_code.co_name  
+    ''' 
     
-    #Check inputs
-    inputArgs = inspect.getargspec(eval(function_name)).args
-    inputTypes = ['np.ndarray','np.ndarray','float','float','float','']
-    if np.size(beta) == 1:
-        inputTypes[5] = 'float'
-    else:
-        inputTypes[5] = 'np.ndarray'
-
-    err = []
-    for i in range(len(inputArgs)):
-        err.append(checkInput(eval(str(inputArgs[i])),inputTypes[i],int(i+1)))
-        
-
-    if err[1:]==err[:-1]:
-        #if no errors, check lengths of tau&field
-        if len(tau)==len(inputField):
-            pass    #all good continue with propagation
+    if gain_calc:
+        #if gain_cal is set to true, a gain parameter must exist
+        #gain may be a constant, or an array with same dim as z-axis array
+        if type(fiber) is Fiber:
+            #Fiber does not have inherent gain parameter, thus gain is set to 0
+            gain = 0
+        elif type(fiber) is FiberGain:
+            #FiberGain has gain parameter
+            gain = fiber.gain
         else:
-            print('Error: inputField and tau are not the same length')
-            return(-1)
+            #Don't know when this would apply
+            gain = 0
+
+        alpha = (fiber.alpha - gain)
     else:
-        for i in range(len(err)):
-            if err[i] != -1:
-                print('Error in function \'' + function_name + '\', Input ' + inputArgs[i]
-                + '\n' + err[i])
-                
-        return(-1)  #if errors, stop 'propagation', return error value -1
-        
-    #Define dispersion parameters - doesn't need to be done
-#    for i in range(len(beta)):
-#        name = 'beta' + str(i+2)
-#        exec( name + '=' + str(beta[i]))
-#        print(str(name) + ' is ' + str(eval(name)))
-        
-    #Define Grid
-    nt = len(tau)   #number of time points
-    Tmax = np.max(tau) - np.min(tau)   #window size (time, ps)
-    dtau = 2*Tmax/nt    #time step size    
-    omega = 2*np.pi*np.fft.fftfreq(nt,dtau)    #frequency array
-    
-    L = lengthFib
-    nz = int(100*L)   #number of spacial steps along fibre z-axis, one every cm
-    dz = L/nz   #position step size
-    z = dz*np.arange(0, nz)    #position array
-    
-#    N = np.sqrt(gamma*max(inputField)/(np.abs(beta2)))     #soliton order
-    
+        alpha = fiber.alpha
+
+
+    #Pulse inputs
+    nt = pulse.nt
+    tau = pulse.time
+    dtau = pulse.dt
+    omega = pulse.freq
+
+    #fiber inputs
+    z = fiber.z
+    nz = np.size(fiber.z)
+    dz = np.gradient(fiber.z)   #position step size
+
     #Dispersion operator
-    D = (-alpha/2)*dz
-    for i in range(len(beta)):
-        D += (1j*beta[i]*omega**(i+2)/np.math.factorial(i+2))*dz
+    D = (-alpha/2)
+    for i in range(len(fiber.beta)):
+        D += (1j*fiber.beta[i]*omega**(i+2)/np.math.factorial(i+2))
     
-    #Nonlinear opterator
-    N = 1j*gamma*dz
+    #Nonlinear operator
+    N = 1j*fiber.gamma
     
-    At = inputField*np.exp(np.abs(inputField)**2*N/2)
-    count = 0
-    for i in range(1,nz):
+    At = pulse.At*np.exp(np.abs(pulse.At)**2*N*dz[0]/2)
+    for i in range(nz-1):
        
        Af = np.fft.ifft(At)
-       Af = Af*np.exp(D)
+       Af = Af*np.exp(D*dz[i])
        At = np.fft.fft(Af)
-       At = At*np.exp(N*np.abs(At)**2)
-       count += 1
-    
-    #print('Loop executed {} times' .format(count))
+       At = At*np.exp(N*dz[i]*np.abs(At)**2)
+
     Af = np.fft.ifft(At)
-    Af = Af*np.exp(D)
+    Af = Af*np.exp(D*dz[-1])
     At = np.fft.fft(Af)
-    outputField = At*np.exp(np.abs(At)**2*N/2)
+    outputField = At*np.exp(np.abs(At)**2*N*dz[-1]/2)
     
     return(outputField)
     
     
-#%%
-def checkInput(inputData, requiredType, *inputNum):
-    
-    if len(inputNum)==1:
-        number = inputNum[0]
-    else:
-        number = '#'
 
-    if not(isinstance(inputData, eval(requiredType))):
-        errMsg = 'Input ' + str(number) + ' is type ' + str(type(inputData)) + '\nRequired:' + ' \'' + str(requiredType) + '\'\n' 
-    else:
-        errMsg = -1
-    
-    return(errMsg)
 
-#%%
-def rmswidth(x,F):
-    
-    if isinstance(x, np.ndarray):
-        pass
-    else:
-        x = np.asarray(x)
-    
-    if isinstance(F, np.ndarray):
-        pass
-    else:
-        F = np.asarray(F)
-        
-    dx = [x[i]-x[i-1] for i in range(1,len(x))]
-    dx = np.append(dx,dx[-1])
-    
-    #Normalization integration
-    areaF=0
-    for i in range(len(x)):
-        areaF += dx[i]*F[i]
 
-    #Average value
-    mu=0
-    for i in range(len(x)):
-        mu += x[i]*F[i]*dx[i]/areaF
 
-    #Varience (sd = sqrt(var))
-    var = 0
-    for i in range(len(x)):
-        var += dx[i]*F[i]*(x[i]-mu)**2/areaF
-    
-    #returns avg and rms width
-    return(mu, np.sqrt(var))
+
+
+
+
+
+
+
+
+
+
 
 
 #%%
