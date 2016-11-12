@@ -30,7 +30,7 @@ class Pulse:
     .time = time array (s)
     .freq = corresponding angular freq array (rad/s)
     .At = time domain Field
-    .Af = freq domain Field
+    .Af = freq domain Field (redundant, removed)
     .lambda0 = central wavelength of pulse
 
     Note: At should be used as the primary field. Af should only be reference. 
@@ -57,7 +57,7 @@ class Pulse:
         self.dt = dtau
 
     def getAf(self):
-        return np.fft.ifft(self.At)
+        return ((self.dt*self.nt)/(sp.sqrt(2*np.pi)))*np.fft.ifft(self.At)
 
     def copyPulse(self, new_At = None):
         '''
@@ -81,13 +81,16 @@ class Pulse:
 
 class Fiber:
     '''
-    Defines a Fiber opbject
+    Defines a Fiber object
     .length = length of fiber (m)
     .alpha = loss coefficient (m^-1), +alpha means loss
     .beta = dispersion parameters, 2nd 3rd 4th order. array
     .gamma = nonlinear parameter, (W*m)^-1\
     
     can be used for simple gain fiber by using alpha (-alpha = gain-loss)
+
+    .core_d = core diameter
+    .clad_d = cladding diameter
 
     .z is the z-axis array for the fiber
 
@@ -100,12 +103,18 @@ class Fiber:
     Z_STP_DEFAULT = 0.003  #default grid size, in m
     Z_NUM_DEFAULT = 300     #default number of grid points
 
-    def __init__(self, length = 0, alpha = 0, beta = np.array([0,0,0]), gamma = 0, grid_type = 'abs', z_grid = None):
+    CORE_D_DEFAULT = 6E-6    #default core diameter, 6um
+    CLAD_D_DEFAULT = 125E-6  #default clad diameter, 125um
+
+    def __init__(self, length = 0, grid_type = 'abs', z_grid = None,  alpha = 0, beta = np.array([0,0,0]), gamma = 0, ):
 
         self.length = length
         self.alpha = alpha
         self.beta = beta
         self.gamma = gamma
+
+        self.core_d = CORE_D_DEFAULT
+        self.clad_d = CLAD_D_DEFAULT
 
         self.initializeGrid(self.length, grid_type, z_grid)
 
@@ -144,6 +153,9 @@ class FiberGain:
     .gamma = nonlinear parameter, (W*m)^-1\
     .gain = fiber gain coefficient (m^-1), same units as alpha, can be z-array or constant
     
+    .core_d = core diameter
+    .clad_d = cladding diameter
+
     .sigma_x are 2x2 arrays. col 0 = wavelength, col 1 = sigma, row 0 = pump, row 1= signal
     .tau is excited state lifetime
     .z is the z-axis array for the fiber
@@ -156,6 +168,9 @@ class FiberGain:
 
     Z_STP_DEFAULT = 0.003  #default grid size, in m
     Z_NUM_DEFAULT = 300     #default number of grid points
+
+    CORE_D_DEFAULT = 6E-6    #default core diameter, 6um
+    CLAD_D_DEFAULT = 125E-6  #default clad diameter, 125um
 
     def __init__(self, length = 0, alpha = 0, beta = np.array([0,0,0]), gamma = 0, gain = 0, grid_type = 'abs', z_grid = None):
 
@@ -170,6 +185,9 @@ class FiberGain:
 
         self.tau = 770E-6
         self.N = 7.1175E25
+
+        self.core_d = CORE_D_DEFAULT
+        self.clad_d = CLAD_D_DEFAULT
 
         self.initializeGrid(self.length, grid_type, z_grid)
 
@@ -414,31 +432,19 @@ def opticalFilter(pulse, filter_type, lambda0 = None, bandwidth = 2E-9, loss = 0
     return output_At
 
 
-def propagateFiber  (pulse, fiber, gain_calc = False):
+def propagateFiber  (pulse, fiber):
     '''This function will propagate the input field along the length of...
     a fibre with the given properties...
    Requires a Pulse class object and Fiber class object. Fiber can also be FiberGain class
-    function_name = sys._getframe().f_code.co_name  
+
+   Inputs:
+   pulse = Pulse class object
+   fiber = Fiber class object (Fiber or FiberGain)
+
+   Outputs:
+    outputField = time domain output field, At
     ''' 
     
-    if gain_calc:
-        #if gain_cal is set to true, a gain parameter must exist
-        #gain may be a constant, or an array with same dim as z-axis array
-        if type(fiber) is Fiber:
-            #Fiber does not have inherent gain parameter, thus gain is set to 0
-            gain = 0
-        elif type(fiber) is FiberGain:
-            #FiberGain has gain parameter
-            gain = fiber.gain
-        else:
-            #Don't know when this would apply
-            gain = 0
-
-        alpha = (fiber.alpha - gain)
-    else:
-        alpha = fiber.alpha
-
-
     #Pulse inputs
     nt = pulse.nt
     tau = pulse.time
@@ -446,28 +452,45 @@ def propagateFiber  (pulse, fiber, gain_calc = False):
     omega = pulse.freq
 
     #fiber inputs
-    z = fiber.z
     nz = np.size(fiber.z)
     dz = np.gradient(fiber.z)   #position step size
 
-    #Dispersion operator
+    #compile losses(alpha) and gain appropriately, result should have same dim as fiber.z
+    if type(fiber) is Fiber:
+        #Fiber does not have inherent gain parameter, thus gain is set to 0
+        gain = np.zeros(np.shape(fiber.z))
+    elif type(fiber) is FiberGain:
+        #FiberGain has gain parameter
+        #if fiber.gain is const, this creates a const arrray, if .gain is an array this is simply X 1
+        gain = np.ones(np.shape(fiber.z))*fiber.gain
+    else:
+        #Don't know when this would apply
+        gain = np.zeros(np.shape(fiber.z))
+
+    #combined loss and gain, will be array same dim as fiber.z
+    #fiber.alpha could be const. or array, result is same dimensionally
+    alpha = (fiber.alpha - gain)
+
+
+    #Dispersion operator, same dim as fiber.z
     D = (-alpha/2)
     for i in range(len(fiber.beta)):
         D += (1j*fiber.beta[i]*omega**(i+2)/np.math.factorial(i+2))
     
-    #Nonlinear operator
+    #Nonlinear operator, constant
     N = 1j*fiber.gamma
     
+    #Main propagation loop
     At = pulse.At*np.exp(np.abs(pulse.At)**2*N*dz[0]/2)
     for i in range(nz-1):
        
        Af = np.fft.ifft(At)
-       Af = Af*np.exp(D*dz[i])
+       Af = Af*np.exp(D[i]*dz[i])
        At = np.fft.fft(Af)
        At = At*np.exp(N*dz[i]*np.abs(At)**2)
 
     Af = np.fft.ifft(At)
-    Af = Af*np.exp(D*dz[-1])
+    Af = Af*np.exp(D[-1]*dz[-1])
     At = np.fft.fft(Af)
     outputField = At*np.exp(np.abs(At)**2*N*dz[-1]/2)
     
