@@ -180,8 +180,10 @@ class FiberGain:
         self.gamma = gamma
         self.gain = gain
 
-        self.sigma_a = np.zeros((2,2))
-        self.sigma_e = np.zeros((2,2))
+        self.sigma_a = np.zeros(2)
+        self.sigma_e = np.zeros(2)
+    
+        self.lambdas = np.zeros(2)
 
         self.tau = 770E-6
         self.N = 7.1175E25
@@ -273,14 +275,14 @@ def calcGain(fiber, Ip, Is):
     Output z-array of gain
     fiber.sigma_x are 2x2 arrays. col 0 = wavelength, col 1 = sigma, row 0 = pump, row 1= signal
     '''
-    s_ap = fiber.sigma_a[0,1]
-    s_as = fiber.sigma_a[1,1]
+    s_ap = fiber.sigma_a[0]
+    s_as = fiber.sigma_a[1]
 
-    s_ep = fiber.sigma_e[0,1]
-    s_es = fiber.sigma_e[1,1]
+    s_ep = fiber.sigma_e[0]
+    s_es = fiber.sigma_e[1]
 
-    v_p = fiber.sigma_a[0,0]
-    v_s = fiber.sigma_e[1,0]
+    v_p = c/fiber.lambdas[0]
+    v_s = c/fiber.lambdas[1]
 
     b_p = (s_ap + s_ep)/(h*v_p)
     b_s = (s_as + s_es)/(h*v_s)
@@ -476,11 +478,13 @@ def propagateFiber  (pulse, fiber):
     #fiber.alpha could be const. or array, result is same dimensionally
     alpha = (fiber.alpha - gain)
 
-
-    #Dispersion operator, same dim as fiber.z
-    D = (-alpha/2)
+    #Define Dispersion operator: D = G + B, G = gain/loss, B = dispersion
+    G = -alpha/2 + 0j*alpha
+    B = 0
+    
+    #Dispersion components
     for i in range(len(fiber.beta)):
-        D += (1j*fiber.beta[i]*omega**(i+2)/np.math.factorial(i+2))
+        B += (1j*fiber.beta[i]*omega**(i+2)/np.math.factorial(i+2))
     
     #Nonlinear operator, constant
     N = 1j*fiber.gamma
@@ -488,11 +492,13 @@ def propagateFiber  (pulse, fiber):
     #Main propagation loop
     At = pulse.At*np.exp(np.abs(pulse.At)**2*N*dz[0]/2)
     for i in range(nz-1):
+        
+        D = G[i] + B
        
-       Af = np.fft.ifft(At)
-       Af = Af*np.exp(D[i]*dz[i])
-       At = np.fft.fft(Af)
-       At = At*np.exp(N*dz[i]*np.abs(At)**2)
+        Af = np.fft.ifft(At)
+        Af = Af*np.exp(D*dz[i])
+        At = np.fft.fft(Af)
+        At = At*np.exp(N*dz[i]*np.abs(At)**2)
 
     Af = np.fft.ifft(At)
     Af = Af*np.exp(D[-1]*dz[-1])
