@@ -1,8 +1,25 @@
 # -*- coding: utf-8 -*-
 """
-Created on Sat Nov 12 16:25:06 2016
+Created on Wed Nov 23 21:18:13 2016
 
 @author: cpkmanchee
+
+Simulate pulse propagation through laser system
+
+Schematic:
+
+1. Oscillator output, 100fs TL pulse, sec2 or gaus shape
+2. Stretching fiber
+    a. PM1a, ~few meters
+    b. RCF, ~100m
+    c. PM1b, few meters
+    d. return back through c-a
+3. PM2, pm fibre after strecher, ~few m
+4. GF1, preamp 1, 1m
+5. PM3, pm fiber between gain, ~few m
+6. GF2, preamp2, same as GF1
+7. LCA, large core fiber amp, double clad, 2m
+
 
 Notes:
 This file requires pulsemodel.py
@@ -25,12 +42,10 @@ h = 6.62606957E-34  #J*s
 c = 299792458.0     #m/s
 
 
-plt.ion()                            # Turned on Matplotlib's interactive mode
-#
 
 #Define Pulse Object
 pulse = pm.Pulse(1.03E-6)
-pulse.initializeGrid(12, 20E-12)
+pulse.initializeGrid(18, 1.5E-9)
 T0 = 100E-15
 mshape = 1
 chirp0 = 0
@@ -39,26 +54,47 @@ pulse.At = np.sqrt(P_peak)*(sp.exp(-(1/(2*T0**2))*(1+1j*chirp0)*pulse.time**(2*m
 
 
 #Define fiber components
-smf1 = pm.Fiber(1.20, 'abs', 0.005)
-smf1.alpha = 0.0001
-smf1.beta = np.array([0.023, 0.00007, 0])*(1E-12)**(np.array([2,3,4]))
-smf1.gamma = 0.00045
+pm980 = pm.Fiber(5)
+pm980.alpha = 0.000576
+pm980.beta = np.array([0.023, 0.00007, 0])*(1E-12)**(np.array([2,3,4]))
+pm980.gamma = 0.00045
+pm980.core_d = 5.5E-6
 
-smf2 = pm.Fiber(0.3, 'abs', 0.005)
-smf2.alpha = 0.0001
-smf2.beta = np.array([0.023, 0.00007, 0])*(1E-12)**(np.array([2,3,4]))
-smf2.gamma = 0.00045
+rcf = pm.Fiber(100)
+rcf.alpha = 0.001
+rcf.beta = np.array([0.023, 0.00007, 0])*(1E-12)**(np.array([2,3,4]))
+rcf.gamma = 0.00045
+rcf.core_d = 2.4E-6
 
-gf1 = pm.FiberGain(0.6, 'abs', 0.005)
-gf1.alpha = 0.0001
+gf1 = pm.FiberGain(0.6)
+gf1.alpha = 0.000576
 gf1.beta = np.array([0.023, 0.00007, 0])*(1E-12)**(np.array([2,3,4]))
 gf1.gamma = 0.00045
 gf1.sigma_a = np.array([0.93124465,0.06369027])*1E-24
 gf1.sigma_e = np.array([1.18207964,0.64375704])*1E-24
 gf1.lambdas = np.array([0.976,1.030])*1E-6
+gf1.core_d = 5.5E-6
 
-pumpP = 0.6
-Frep = 40E6
+lcfa = pm.FiberGain(2)
+lcfa.alpha = 0.000576
+lcfa.beta = np.array([0.023, 0.00007, 0])*(1E-12)**(np.array([2,3,4]))
+lcfa.gamma = 0.00045
+lcfa.sigma_a = np.array([0.93124465,0.06369027])*1E-24
+lcfa.sigma_e = np.array([1.18207964,0.64375704])*1E-24
+lcfa.lambdas = np.array([0.976,1.030])*1E-6
+lcfa.core_d = 30E-6
+lcfa.clad_d = 250E-6
+#need to check to scale sigma. I think just scale sigma_e by ratio of areas
+
+#Pump parameters
+pa1P = 0.6    #preamp1 pump power, CW
+pa1F = 40E6    #rep. rate at preamp1
+
+pa2P = 0.6    #preamp2 pump power, CW
+pa2F = 500E3    #rep. rate at preamp2
+
+lcaP = 25    #large core amp pump poer
+lcaF = 500E3    #rep. rate at lca
 
 Ip = pumpP/(np.pi*(gf1.core_d/2)**2)
 Is = np.sum(np.abs(pulse.At)**2)*pulse.dt*Frep/(np.pi*(gf1.core_d/2)**2)
@@ -90,11 +126,11 @@ At = propagateFiber(pulse,smf1)
 #pulse.At = pm.propagateFiber(pulse, gf1)
 
 t01, sig1 = pm.rmswidth(pulse.time,np.abs(pulse.At)**2)
-output = pm.gratingPair(pulse, 0.05, 600, 22)
+output = pm.gratingPair(pulse, 1.0, 1500, 45)
 t02, sig2 = pm.rmswidth(pulse.time,np.abs(output)**2)
 
-#input = pulse.At
-#pulse.At = output
+input = pulse.At
+pulse.At = output
 
 #plot output
 t_output, = t_ax.plot(tau,np.abs(pulse.At)**2, 'b-')    #plot time profile
@@ -109,3 +145,4 @@ plt.figlegend((t_input,t_output), ('Input', 'Output'), 'center right')
 [pulseCenter, pulseWidth] = rmswidth(tau, np.abs(Atplot)**2)
 print(pulseCenter, pulseWidth)
 '''
+

@@ -17,6 +17,7 @@ import matplotlib.pyplot as plt
 
 import sys
 import inspect
+import pickle
 
 
 #constants
@@ -221,6 +222,18 @@ class FiberGain:
 
 
 
+def saveObj(obj, filename):
+    with open(filename, 'wb') as output:
+        pickle.dump(obj, output, -1)
+
+
+def loadObj(filename):
+    with open(filename, 'rb') as input:
+        obj = pickle.load(input)
+
+    return obj
+
+
 def checkInput(inputData, requiredType, *inputNum):
     
     if len(inputNum)==1:
@@ -307,27 +320,36 @@ def calcGain(fiber, Ip, Is):
     return g
 
 
-def gratingPair(pulse, L, d, theta, loss = 0):
+def gratingPair(pulse, L, N, AOI, loss = 0):
     '''
+    ***NEED TO FIX EQN's, theta not AOI*** see ettiene thesis and Backus 1998
     Simulate grating pair
     pulse = input pulse object
-    L = grating separation (m)
-    d = groove spacing (m) of gratings
-    theta = angle of incidence (rad)
+    L = grating separation (m), use (-) L for stretcher, (+) L for compressor geometry
+    N = lns/mm of gratings
+    AOI = angle of incidence (deg)
     loss = %loss of INTENSITY (not field)
+
+    theta = diffraction angle (assumed -1 order, as is standard)
+    d = groove spacing
 
     returns time-domain output field
 
     '''
+    m = 1
+    g = AOI*np.pi/180    #convert AOI into rad
+    d = 1E-3/N    #gives grove spacing in m
 
-    Af = pulse.getAf()
+    Af = np.fft.ifft(pulse.At)
     w0 = 2*np.pi*c/pulse.lambda0
     w = pulse.freq + w0
+    theta = np.arcsin(m*2*np.pi*c/(w0*d) - np.sin(g)) 
 
-    phi2 = (-2*2*(np.pi**2)*L*c/(d**2*w**3))*(1-(2*np.pi*c/(d*w) - np.sin(theta))**2)**(-3/2)
-    phi3 = (12*(np.pi**2)*c*L/(d**2*w**4*(np.cos(theta))**3))*(1+((2*np.pi*c*np.sin(theta))/(w*d*(np.cos(theta))**2)))
+    phi2 = (-m**2*4*(np.pi**2)*L*c/(d**2*w0**3))*(1/np.cos(theta)**3)
+    phi3 = (-3*phi2/w0)*(1-(2*np.pi*c*m*np.sin(theta)/(w0*d*np.cos(theta)**2)))
+    phi4 = (2*phi3**2/(3*phi2)) + phi2*(2*np.pi*c*m/(w0**2*d*np.cos(theta)**2))**2
 
-    output_At = np.sqrt(1-loss)*np.fft.fft(Af*np.exp(-1j*(phi2*(w-w0)**2/2 + phi3*(w-w0)**3/6)))
+    output_At = np.sqrt(1-loss)*np.fft.fft(Af*np.exp(-1j*(phi2*(w-w0)**2/2 + phi3*(w-w0)**3/6 + phi4*(w-w0)**4/12)))
     
     return output_At
 
@@ -389,8 +411,8 @@ def opticalFilter(pulse, filter_type, lambda0 = None, bandwidth = 2E-9, loss = 0
     w0 is central freq (ang) of FILTER
     '''
     
-    Af = pulse.getAf()
-
+    Af = np.fft.ifft(pulse.At)
+    
     if lambda0 == None:
         lambda0 = pulse.lambda0
 
