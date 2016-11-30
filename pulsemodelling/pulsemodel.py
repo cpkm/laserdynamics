@@ -159,7 +159,10 @@ class FiberGain:
 
     .sigma_x are 2x2 arrays. col 0 = wavelength, col 1 = sigma, row 0 = pump, row 1= signal
     .tau is excited state lifetime
+    .N is core dopant density
     .z is the z-axis array for the fiber
+
+    Note: N*sigma_a_pump = pump abs coefficient (often quoted by manufacturers in dB/m)
 
     grid_type specifies whether the z-grid is defined by the grid spacing ('abs' or absolute),
     or number of points ('rel' or relative)
@@ -187,7 +190,7 @@ class FiberGain:
         self.lambdas = np.zeros(2)
 
         self.tau = 770E-6
-        self.N = 7.1175E25
+        self.N = 6.1813931E25
 
         self.core_d = self.CORE_D_DEFAULT
         self.clad_d = self.CLAD_D_DEFAULT
@@ -209,7 +212,8 @@ class FiberGain:
             if z_grid == None:
                 z_grid = self.Z_STP_DEFAULT 
 
-            nz = self.length//z_grid
+            nz = np.max([2,self.length//z_grid])
+            z_grid = self.length/nz
             self.z = z_grid*np.arange(0, nz)    #position array
 
         else:
@@ -280,7 +284,35 @@ def rmswidth(x,F):
     
     #returns avg and rms width
     return(mu, np.sqrt(var))
-
+    
+    
+def calcZGRid(fiber,pulse, res = 'med'):
+    
+    if isinstance(res, str):
+        if res.lower() == 'low':
+            n = 10
+        elif res.lower() == 'med':
+            n = 35
+        elif res.lower() == 'high':
+            n = 100
+        else:
+            n = 35
+        
+    elif isinstance(res, int) or isinstance(res, float):
+        n = res//1
+                        
+    _, t0 = rmswidth(pulse.time, np.abs(pulse.At))
+    p0 = (np.abs(pulse.At)**2).max()
+    
+    ld = t0**2/(np.abs(fiber.beta[0]))
+    ln = 1/(p0*fiber.gamma)
+    
+    l_ref = 1/((1/ld)+(1/ln))
+    
+    return l_ref/n
+    
+    
+    
 
 def calcGain(fiber, Ip, Is):
     '''
