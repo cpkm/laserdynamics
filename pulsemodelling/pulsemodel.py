@@ -14,6 +14,7 @@ change the object's parameters in the primary script
 import numpy as np
 import scipy as sp
 import matplotlib.pyplot as plt
+from matplotlib.pyplot import cm 
 
 import sys
 import inspect
@@ -23,6 +24,17 @@ import pickle
 #constants
 h = 6.62606957E-34  #J*s
 c = 299792458.0     #m/s
+
+
+class func:
+    '''general function class to enable interpolation of a variable
+    '''
+    def __init__(self, value = None, x = None):
+        self.val = value
+        self.ind = x
+
+    def at(self,x):
+        return np.interp(x, self.ind, self.val)
 
 
 class Pulse:
@@ -133,7 +145,8 @@ class Fiber:
             if z_grid == None:
                 z_grid = self.Z_STP_DEFAULT 
 
-            nz = self.length//z_grid
+            nz = np.max([2,self.length//z_grid])
+            z_grid = self.length/nz
             self.z = z_grid*np.arange(0, nz)    #position array
 
         else:
@@ -226,6 +239,38 @@ class FiberGain:
 
 
 
+def rk4(f, x, y0, const_args = [], abs_x = False):
+    '''
+    functional form
+    y'(x) = f(x,y,constants)
+
+    f must be function, f(x,y,const_args)
+    x = array
+    y0 = initial condition,
+    cont_args = additional constants required for f
+
+    returns y, integrated array
+    '''
+
+    N = np.size(x)
+    y = np.zeros(np.shape(x))
+    y[0] = y0
+    dx = np.gradient(x)
+
+    if abs_x:
+        dx = np.abs(dx)
+
+    for i in range(N-1):
+        k1 = f(x[i], y[i], *const_args)
+        k2 = f(x[i] + dx[i]/2, y[i] + k1*dx[i]/2, *const_args)
+        k3 = f(x[i] + dx[i]/2, y[i] + k2*dx[i]/2, *const_args)
+        k4 = f(x[i] + dx[i], y[i] + k3*dx[i], *const_args)
+
+        y[i+1] = y[i] + (k1 + 2*k2 + 2*k3 + k4)*dx[i]/6
+
+    return y
+
+
 def saveObj(obj, filename):
     with open(filename, 'wb') as output:
         pickle.dump(obj, output, -1)
@@ -286,7 +331,7 @@ def rmswidth(x,F):
     return(mu, np.sqrt(var))
     
     
-def calcZGRid(fiber,pulse, res = 'med'):
+def calcZGrid(fiber,pulse, res = 'med'):
     
     if isinstance(res, str):
         if res.lower() == 'low':
@@ -314,12 +359,13 @@ def calcZGRid(fiber,pulse, res = 'med'):
     
     
 
-def calcGain(fiber, Ip, Is):
+def calcGain(fiber, Pp, Ps, pump_scheme = 'core', pump_dir = 'forward', method = 'simple'):
     '''
     Calculate steady state gain over fiber
     Output z-array of gain
     fiber.sigma_x are 2x2 arrays. col 0 = wavelength, col 1 = sigma, row 0 = pump, row 1= signal
     '''
+
     s_ap = fiber.sigma_a[0]
     s_as = fiber.sigma_a[1]
 
@@ -335,20 +381,98 @@ def calcGain(fiber, Ip, Is):
     a_s = s_as/(h*v_s)
 
     tau_se = fiber.tau
+    dv_ase = (53E-9)*(v_s**2/c)
+
+    MFA = np.pi*(fiber.core_d/2)**2
+    G_s = MFA/(np.pi*(fiber.core_d/2)**2)
+    Is = Ps/(np.pi*(fiber.core_d/2)**2)
+
+    #define pump overlap, core pumped or clad pumped
+    if pump_scheme.lower() in {'clad', 'cladding'}:
+        G_p = MFA/(np.pi*(fiber.clad_d/2)**2)
+        Ip = Pp/(np.pi*(fiber.clad_d/2)**2)
+    else:
+        G_p = MFA/(np.pi*(fiber.core_d/2)**2)
+        Ip = Pp/(np.pi*(fiber.core_d/2)**2)
+
 
     g = np.zeros(np.shape(fiber.z))
     N=fiber.N
     dz = np.gradient(fiber.z)
 
-    for i in range(np.size(g)):
 
-        n = (a_p*Ip + a_s*Is)/(b_p*Ip + b_s*Is + 1/tau_se)
+    if method.lower() in {'simple', 's'}:
+    #simple integration for intensities and n
+        for i in range(np.size(g)):
+
+            n = (a_p*Ip + a_s*Is)/(b_p*Ip + b_s*Is + 1/tau_se)
+            
+            Ip = Ip*np.exp(-G_p*(s_ap*N*(1-n) - s_ep*N*n)*dz[i])
+            Is = Is*np.exp(-G_s*(s_as*N*(1-n) - s_es*N*n)*dz[i])
+
+            g[i] = (s_es*N*n - s_as*N*(1-n))
+
+
+    elif method.lower() in {'rk4', 'r'}:
+    #iterative rk4 method, significantly longer than 'simple'
+    #likely only necessary for double clad fiber
+        I0p = Ip
+        I0s = Is
+        Ip = I0p*np.ones(np.shape(fiber.z))
+        Isig = I0s*np.ones(np.shape(fiber.z))
+        Iasef = np.zeros(np.shape(fiber.z))
+        Iaseb = np.zeros(np.shape(fiber.z))
         
-        Ip = Ip*np.exp(-(s_ap*N*(1-n) - s_ep*N*n)*dz[i])
-        Is = Is*np.exp(-(s_as*N*(1-n) - s_es*N*n)*dz[i]) + n*h*v_s*N*dz[i]/tau_se
+        dIp =   lambda z, I, n: -G_p*(s_ap*N*(1-n.at(z)) - s_ep*N*n.at(z))*I 
+        dIsig = lambda z, I, n: -G_s*(s_as*N*(1-n.at(z)) - s_es*N*n.at(z))*I 
+        dIase = lambda z, I, n: -G_s*(s_as*N*(1-n.at(z)) - s_es*N*n.at(z))*I + n.at(z)*h*v_s*N*s_es*dv_ase/MFA
 
-        g[i] = (s_es*N*n - s_as*N*(1-n))
+        n = func()
+        n.ind = fiber.z
+        n.val = np.zeros(np.shape(n.ind))
 
+        loop_num = 0
+        gain_err = 1
+        c_gain = 0
+        
+        max_loops = 500
+        min_err = 1E-4
+
+        while (loop_num < max_loops and gain_err > min_err):
+
+            p_gain = c_gain
+            
+            for i in range(np.size(fiber.z)):
+                Is = Isig + Iasef + Iaseb
+                n.val[i] = (a_p*Ip[i] + a_s*Is[i])/(b_p*Ip[i] + b_s*Is[i] + 1/tau_se)
+                
+                if i < np.size(fiber.z)-1:
+                    zf = np.array([fiber.z[i],fiber.z[i+1]])
+                    zb = np.array([fiber.z[-i-2],fiber.z[-i-1]])
+    
+                    if pump_dir.lower().startswith('b'):
+                            Ip[-i-2],_ = np.flipud(rk4(dIp, np.flipud(zb), Ip[-i-1], [n], True))
+                    else:
+                        _,Ip[i+1] = rk4(dIp, zf, Ip[i], [n])
+                    _,Isig[i+1] = rk4(dIsig, zf, Isig[i], [n])
+                    _,Iasef[i+1] = rk4(dIase, zf, Iasef[i], [n])
+                    Iaseb[-i-2],_ = np.flipud(rk4(dIase, np.flipud(zb), Iaseb[-i-1], [n], True))
+
+            g = (s_es*N*n.val - s_as*N*(1-n.val))
+
+            c_gain = g.sum()
+            gain_err = np.abs((c_gain-p_gain)/c_gain)
+
+            loop_num = loop_num + 1
+            
+
+        print(gain_err, loop_num)
+        
+
+    else:
+        g.fill(1)
+        print('Unknown method. Gain set to 1')
+    
     return g
 
 
@@ -372,16 +496,16 @@ def gratingPair(pulse, L, N, AOI, loss = 0):
     g = AOI*np.pi/180    #convert AOI into rad
     d = 1E-3/N    #gives grove spacing in m
 
-    Af = np.fft.ifft(pulse.At)
+    Af = pulse.getAf()
     w0 = 2*np.pi*c/pulse.lambda0
-    w = pulse.freq + w0
+    omega = pulse.freq
     theta = np.arcsin(m*2*np.pi*c/(w0*d) - np.sin(g)) 
 
-    phi2 = (-m**2*4*(np.pi**2)*L*c/(d**2*w0**3))*(1/np.cos(theta)**3)
-    phi3 = (-3*phi2/w0)*(1-(2*np.pi*c*m*np.sin(theta)/(w0*d*np.cos(theta)**2)))
-    phi4 = (2*phi3**2/(3*phi2)) + phi2*(2*np.pi*c*m/(w0**2*d*np.cos(theta)**2))**2
+    phi2 = (-m**2*2*4*(np.pi**2)*L*c/(d**2*w0**3))*(1/np.cos(theta)**3)
+    phi3 = (-3*phi2/w0)*(1+(2*np.pi*c*m*np.sin(theta)/(w0*d*np.cos(theta)**2)))
+    phi4 = ((2*phi3)**2/(3*phi2)) + phi2*(2*np.pi*c*m/(w0**2*d*np.cos(theta)**2))**2
 
-    output_At = np.sqrt(1-loss)*np.fft.fft(Af*np.exp(-1j*(phi2*(w-w0)**2/2 + phi3*(w-w0)**3/6 + phi4*(w-w0)**4/12)))
+    output_At = np.sqrt(1-loss)*np.fft.fft(Af*np.exp(1j*(phi2*(omega)**2/2 + phi3*(omega)**3/6 + phi4*(omega)**4/24)))
     
     return output_At
 
@@ -488,7 +612,7 @@ def opticalFilter(pulse, filter_type, lambda0 = None, bandwidth = 2E-9, loss = 0
     return output_At
 
 
-def propagateFiber  (pulse, fiber):
+def propagateFiber  (pulse, fiber, autodz = False):
     '''This function will propagate the input field along the length of...
     a fibre with the given properties...
 
@@ -496,20 +620,29 @@ def propagateFiber  (pulse, fiber):
     # dA/dz = -ib2/2 (d^2A/dtau^2) + b3/6 (d^3 A/dtau^3) -aplha/2 + ig|A|^2*A  
     # --> A is field A = sqrt(P0)*u
 
-   Requires a Pulse class object and Fiber class object. Fiber can also be FiberGain class
+    Requires a Pulse class object and Fiber class object. Fiber can also be FiberGain class
 
-   Inputs:
-   pulse = Pulse class object
-   fiber = Fiber class object (Fiber or FiberGain)
-
-   Outputs:
+    Inputs:
+    pulse = Pulse class object
+    fiber = Fiber class object (Fiber or FiberGain)
+    autodz = boolean to calculate fiber dz
+   
+    Outputs:
     outputField = time domain output field, At
+    
+    Warning: setting autodz = True will modify fiber object!!!
+    autodz uses calcZGrid to calculate dz based on the input pulse and fiber
+    Should not be used for gain fiber!!!, since gain calc depends on dz as well
     ''' 
+    #calculate 
+    if autodz:
+        dz = calcZGrid(fiber,pulse)
+        fiber.initializeGrid(fiber.length, 'abs', dz)
     
     #Pulse inputs
-    nt = pulse.nt
-    tau = pulse.time
-    dtau = pulse.dt
+    #nt = pulse.nt
+    #tau = pulse.time
+    #dtau = pulse.dt
     omega = pulse.freq
 
     #fiber inputs
@@ -561,103 +694,3 @@ def propagateFiber  (pulse, fiber):
     
     return(outputField)
     
-    
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-#%%
-'''
-
-plt.ion()                            # Turned on Matplotlib's interactive mode
-#
-
-# Pulse propagation via Nonlinear Schrodinger Equation (NLSE)
-# dA/dz = -ib2/2 (d^2A/dtau^2) + b3/6 (d^3 A/dtau^3) -aplha/2 + ig|A|^2*A  
-# --> A is field A = sqrt(P0)*u
-
-
-#Fibre parameters
-L = 50.0;     #length in m
-beta2 = 0.2  #GVD parameter, ps^2/m
-beta3 = 0.0    #TOD, ps^3/m
-alpha = 0.001   #loss (gain), 1/m
-gamma = 0.003   #nonlinear parameter, 1/(W*m)
-
-
-#Grid Initialization
-nt_order = 11   #exponent for number of time steps, nt = 2^nt_order
-Tmax = 20.0   #window size (time, ps)
-nz = 1000   #number of spacial steps along fibre z-axis
-
-nt = 2**nt_order    #number of time steps, power of 2 for FFT
-dtau = 2*Tmax/nt    #time step size
-dz = L/nz   #position step size
-tau = dtau*np.arange(-nt//2, nt//2) #time array
-omega = 2*np.pi*np.fft.fftfreq(nt,dtau)    #frequency array
-z = dz*np.arange(0, nz)    #position array
-#At = np.zeros((nz,nt))
-#Af = np.zeros((nz,nt))
-
-
-#Initial Field Parameters
-mshape = 1  #1=Gaussian, >1=super Gaussian
-chirp0 = 0  #initial chirp
-T0 = 1  #initial pulse width
-P0 = 6.667  #power, W
-
-At = (sp.exp(-(1/(2*T0**2))*(1+1j*chirp0)*tau**(2*mshape)))  #initial (time) field
-Af = np.fft.ifft(At)    #initial (freq) field
-
-#Plotting
-fieldPlot, (t_ax, f_ax) = plt.subplots(2)   #set up plot figure
-fieldPlot.suptitle('Pulse propagation profile')
-
-#normalize and scale to power
-Atplot = sp.sqrt(P0)*At
-Afplot = sp.sqrt(P0)*(2*Tmax/(sp.sqrt(2*np.pi)))*Af
-
-t_input, = t_ax.plot(tau,np.abs(Atplot)**2, 'b--')    #plot time profile
-t_ax.set_xlim([-5,5])
-t_ax.set_xlabel('Time (ps)')
-f_ax.plot(np.fft.fftshift(omega)/(2*np.pi),np.fft.fftshift(np.abs(Afplot)**2), 'b--')  #plot freq profile
-f_ax.set_xlim(-0.5,0.5)
-f_ax.set_xlabel('Frequency shift (THz)')
-
-#Pulse Stats
-[pulseCenter0, pulseWidth0] = rmswidth(tau, np.abs(Atplot)**2)
-print(pulseCenter0, pulseWidth0)
-
-#Propagation
-beta = np.array([beta2, beta3])
-At = propagate(tau, At, L, alpha, gamma, beta)
-
-#Plotting
-#normalize and scale to power
-Af = np.fft.ifft(At)
-Atplot = sp.sqrt(P0)*At
-Afplot = sp.sqrt(P0)*(2*Tmax/(sp.sqrt(2*np.pi)))*Af
-
-t_output, = t_ax.plot(tau,np.abs(Atplot)**2, 'b-')    #plot time profile
-t_ax.set_xlim([-5,5])
-f_ax.plot(np.fft.fftshift(omega)/(2*np.pi),np.fft.fftshift(np.abs(Afplot)**2), 'b-')  #plot freq profile
-f_ax.set_xlim(-0.5,0.5)
-
-plt.figlegend((t_input,t_output), ('Input', 'Output'), 'center right')
-
-#Pulse stats
-[pulseCenter, pulseWidth] = rmswidth(tau, np.abs(Atplot)**2)
-print(pulseCenter, pulseWidth)
-'''
