@@ -33,6 +33,7 @@ import scipy as sp
 import matplotlib.pyplot as plt
 import pulsemodel as pm
 
+import shutil
 import glob
 import os
 from datetime import datetime
@@ -68,6 +69,8 @@ f = open(z_file,'a')
 f.write(result_folder + '\n' + start_date + ' ' + start_time + '\n')
 f.close()
 
+shutil.copy(__file__, result_folder + '/' + os.path.basename(__file__))
+
 
 #constants
 h = 6.62606957E-34  #J*s
@@ -77,22 +80,22 @@ c = 299792458.0     #m/s
 #Define Pulse Object
 pulse = pm.Pulse(1.03E-6)
 pulse.initializeGrid(18, 1.5E-9)
-T0 = 1000E-15
+T0 = 150E-12
 mshape = 1
 chirp0 = 0
-P_peak = 1E3   #peak power, 10kW corresp. to 1ps pulse, 400mW avg, 40MHz - high end of act. oscillator
+P_peak = 5E-3   #peak power, 10kW corresp. to 1ps pulse, 400mW avg, 40MHz - high end of act. oscillator
 pulse.At = np.sqrt(P_peak)*(sp.exp(-(1/(2*T0**2))*(1+1j*chirp0)*pulse.time**(2*mshape)))
 
 
 #Define fiber components
-pm980 = pm.Fiber(4)
+pm980 = pm.Fiber(1)
 pm980.alpha = 0.000576
 pm980.beta = np.array([0.023, 0.00007, 0])*(1E-12)**(np.array([2,3,4]))
 pm980.gamma = 0.00045
 pm980.core_d = 5.5E-6
 
 #reduced core strtching fibre
-rcf = pm.Fiber(5)
+rcf = pm.Fiber(150)
 rcf.alpha = 0.001
 rcf.beta = np.array([0.1096108, 0.000810048, 0])*(1E-12)**(np.array([2,3,4]))
 rcf.gamma = 0.00045*(6.0/2.9)**2
@@ -110,7 +113,7 @@ ln = 1/(p0*fiber.gamma)
     
 l_ref = 1/((1/ld)+(1/ln))
 
-dz = l_ref/(np.exp((np.arange(30)-5)/5))
+dz = fiber.length/(np.append(np.arange(10)+2, [100,1000]))#l_ref/(np.exp((np.arange(30)-5)/5))
 dz_out = np.zeros(np.shape(dz))
 
 f = open(z_file,'a')
