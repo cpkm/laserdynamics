@@ -496,7 +496,7 @@ def gratingPair(pulse, L, N, AOI, loss = 0):
     g = AOI*np.pi/180    #convert AOI into rad
     d = 1E-3/N    #gives grove spacing in m
 
-    Af = pulse.getAf()
+    Af = np.fft.ifft(pulse.At)
     w0 = 2*np.pi*c/pulse.lambda0
     omega = pulse.freq
     theta = np.arcsin(m*2*np.pi*c/(w0*d) - np.sin(g)) 

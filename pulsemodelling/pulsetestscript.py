@@ -29,7 +29,7 @@ plt.ion()                            # Turned on Matplotlib's interactive mode
 
 #Define Pulse Object
 pulse = pm.Pulse(1.03E-6)
-pulse.initializeGrid(12, 20E-12)
+pulse.initializeGrid(16, 200E-12)
 T0 = 100E-15
 mshape = 1
 chirp0 = 0
@@ -38,9 +38,9 @@ pulse.At = np.sqrt(P_peak)*(sp.exp(-(1/(2*T0**2))*(1+1j*chirp0)*pulse.time**(2*m
 
 
 #Define fiber components
-smf1 = pm.Fiber(1.20, 'abs', 0.005)
+smf1 = pm.Fiber(98.42, 'abs', 0.005)
 smf1.alpha = 0.0001
-smf1.beta = np.array([0.023, 0.00007, 0])*(1E-12)**(np.array([2,3,4]))
+smf1.beta = np.array([0.0251222977, 4.5522276126132602e-05, -5.0542788517531417e-08])*(1E-12)**(np.array([2,3,4]))
 smf1.gamma = 0.00045
 
 smf2 = pm.Fiber(0.3, 'abs', 0.005)
@@ -76,7 +76,15 @@ Frep = 40E6
 
 Ip = pumpP/(np.pi*(gf1.core_d/2)**2)
 Is = np.sum(np.abs(pulse.At)**2)*pulse.dt*Frep/(np.pi*(gf1.core_d/2)**2)
-#gf1.gain = pm.calcGain(gf1,Ip,Is) 
+
+in1 = pulse.At
+
+out1 = pm.propagateFiber(pulse,smf1)
+pulse.At = out1
+out2 = pm.gratingPair(pulse,1.5,600,17)
+
+plt.plot(pulse.time,np.abs(in1),pulse.time,np.abs(out1),pulse.time,np.abs(out2))
+ 
 '''
 Ps = 0.0005 #np.sum(np.abs(pulse.At)**2)*pulse.dt*lcaF
 g0 = pm.calcGain(lcfa,lcaP,Ps,'clad')
