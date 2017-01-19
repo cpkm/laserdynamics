@@ -213,9 +213,9 @@ z = np.arange(0, xstal_L+dz, dz)
 z_N = np.size(z)
 
 #Temporal grid
-Frep = 1E3 		#target rep rate
-Ng = 30 		#number of round trips during amp
-Ncyc = 10  		#number of cycles
+Frep = 10E3 		#target rep rate
+Ng = 20 		#number of round trips during amp
+Ncyc = 15  		#number of cycles
 R = 100          #pumping cycle time multiplier
 
 dt = 2*d/c 		#roundtrip cavity time is the time step, ~10-12ns
@@ -321,9 +321,8 @@ for k in range(Ncyc):
             waitbar(q/Nsim)
 
 
-
-
-
+cycle = np.arange(Ncyc)+1
+Fs_peak = Fs_out[-1,cycle*Nd - 1]
 
 
 

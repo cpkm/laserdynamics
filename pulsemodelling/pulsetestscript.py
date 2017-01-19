@@ -38,15 +38,16 @@ pulse.At = np.sqrt(P_peak)*(sp.exp(-(1/(2*T0**2))*(1+1j*chirp0)*pulse.time**(2*m
 
 
 #Define fiber components
-smf1 = pm.Fiber(98.42, 'abs', 0.005)
+smf1 = pm.Fiber(98.42, 'abs', 0.05)
 smf1.alpha = 0.0001
-smf1.beta = np.array([0.0251222977, 4.5522276126132602e-05, -5.0542788517531417e-08])*(1E-12)**(np.array([2,3,4]))
-smf1.gamma = 0.00045
+smf1.beta = np.array([0.0251222977, 4.5522276126132602e-05, 0*-5.0542788517531417e-08])*(1E-12)**(np.array([2,3,4]))
+smf1.gamma = 0*0.00045
 
-smf2 = pm.Fiber(0.3, 'abs', 0.005)
-smf2.alpha = 0.0001
-smf2.beta = np.array([0.023, 0.00007, 0])*(1E-12)**(np.array([2,3,4]))
-smf2.gamma = 0.00045
+smf2 = pm.Fiber(10, 'rel', 1000)
+smf2.alpha = 0.000
+smf2.beta = np.array([0.0247247835, -0.0000496894878, 1.36681168E-7])*(1E-12)**(np.array([2,3,4]))
+smf2.gamma = 0*0.00045
+
 
 gf1 = pm.FiberGain(0.6, 'abs', 0.005)
 gf1.alpha = 0.0001
@@ -79,11 +80,13 @@ Is = np.sum(np.abs(pulse.At)**2)*pulse.dt*Frep/(np.pi*(gf1.core_d/2)**2)
 
 in1 = pulse.At
 
-out1 = pm.propagateFiber(pulse,smf1)
+out1 = pm.propagateFiber(pulse,smf2)
 pulse.At = out1
-out2 = pm.gratingPair(pulse,1.5,600,17)
+#smf2.beta = -smf2.beta
+#out2 = pm.propagateFiber(pulse,smf2)
+out2, g_disp = pm.gratingPair(pulse,0.15,600,17, return_coef = True)
 
-plt.plot(pulse.time,np.abs(in1),pulse.time,np.abs(out1),pulse.time,np.abs(out2))
+plt.plot(pulse.time,np.abs(in1)**2,pulse.time,np.abs(out1)**2,pulse.time,np.abs(out2)**2, '--')
  
 '''
 Ps = 0.0005 #np.sum(np.abs(pulse.At)**2)*pulse.dt*lcaF

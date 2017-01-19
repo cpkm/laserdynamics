@@ -476,7 +476,7 @@ def calcGain(fiber, Pp, Ps, pump_scheme = 'core', pump_dir = 'forward', method =
     return g
 
 
-def gratingPair(pulse, L, N, AOI, loss = 0):
+def gratingPair(pulse, L, N, AOI, loss = 0, return_coef = False):
     '''
     ***NEED TO FIX EQN's, theta not AOI*** see ettiene thesis and Backus 1998
     Simulate grating pair
@@ -507,7 +507,10 @@ def gratingPair(pulse, L, N, AOI, loss = 0):
 
     output_At = np.sqrt(1-loss)*np.fft.fft(Af*np.exp(1j*(phi2*(omega)**2/2 + phi3*(omega)**3/6 + phi4*(omega)**4/24)))
     
-    return output_At
+    if return_coef:
+        return output_At, np.array([phi2,phi3,phi4])
+    else:
+        return output_At
 
 
 def powerTap(pulse, tap, loss = 0):
