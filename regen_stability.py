@@ -130,17 +130,17 @@ v_p = c/l_p;            #pump freq, Hz
 v_s = c/l_s;            #signal freq, Hz
 
 
-d = 1.6         #cavity length, m
+d = 2.64         #cavity length, m
 alpha = 0.05    #cavity losses
-g0 = 0.4        #small signal gain
-E_seed = 1E-6   #seed pulse energy in J
-w_s = 300E-6    #seed spot size
+g0 = 0.2        #small signal gain
+E_seed = 10E-8   #seed pulse energy in J
+w_s = 200E-6    #seed spot size
 E_sat = (np.pi*w_s**2)*h*c/(l_s*(s_es+s_as))   #saturation energy
 
-frep = 1E3      #rep rate
+frep = 2E3      #rep rate
 Td = 1/(frep)   #dumping time
 
-N = 100        # number of roundtrips
+N = 200        # number of roundtrips
 Tr = 2*d/c     # round trip time
 Tg = N*Tr  	    #gate time, integer round trips
 
@@ -157,3 +157,4 @@ t = np.linspace(0,Tg,N, endpoint = False)
 y0 = np.array([g_cur,E_cur])
 y_out = rk4(dy, t, y0)
 
+plt.plot(t/Tr, y_out[:,1])

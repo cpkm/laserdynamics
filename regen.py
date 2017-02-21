@@ -188,24 +188,24 @@ f_s = s_as/s_es
 f_p = s_ap/s_ep
 
 #parameters
-xstal_L = 3.0E-3	#xstal length, m
-eta = 0.03		#xstal doping
+xstal_L = 5E-3	#xstal length, m
+eta = 0.01		#xstal doping
 Nx = 6.3265E27	#host atom density, atoms/m**-3
 Nt = eta*Nx		#dopant atom density, atoms/m**-3
 nt = 1 			#n1+n2, total atom density ratio == 1
 
 #Beam parameters
-wp = 300.0E-6  		#pump beam radius, m
-ws = 300.0E-6  		#signal beam radius, m
+wp = 260.0E-6  		#pump beam radius, m
+ws = 200.0E-6  		#signal beam radius, m
 Pp_pump = 60.0  		#pump power (incident) in W
-Es_seed = 1.0E-6 	#seed energy in J
+Es_seed = 1.0E-8 	#seed energy in J
 
 Ip_pump = Pp_pump/(np.pi*wp**2)
 Fs_seed = Es_seed/(np.pi*ws**2)
 
 #Cavity parameters
-d = 1.6			#total cavity length, m
-alpha = 0.05	#total cavity losses, fraction (0.05 = 5%)
+d = 2.6			#total cavity length, m
+alpha = 0.06	#total cavity losses, fraction (0.05 = 5%)
 
 #Spacial grid
 dz = xstal_L/300	#in m
@@ -213,9 +213,9 @@ z = np.arange(0, xstal_L+dz, dz)
 z_N = np.size(z)
 
 #Temporal grid
-Frep = 10E3 		#target rep rate
-Ng = 20 		#number of round trips during amp
-Ncyc = 15  		#number of cycles
+Frep = 1E3 		#target rep rate
+Ng = 60 		#number of round trips during amp
+Ncyc = 20  		#number of cycles
 R = 100          #pumping cycle time multiplier
 
 dt = 2*d/c 		#roundtrip cavity time is the time step, ~10-12ns
@@ -280,8 +280,10 @@ for k in range(Ncyc):
         G_out[m+1] = G
         gainCoef_out[:,m+1] = gain_coeffs
         
-        if m%(Nsim//1000) == 0:
-            waitbar(m/Nsim)
+        if Nsim > 1000:
+            
+            if m%(Nsim//1000) == 0:
+                waitbar(m/Nsim)
             
             
     Fs_0 = Fs_seed
@@ -317,12 +319,16 @@ for k in range(Ncyc):
         G_out[q] = G
         gainCoef_out[:,q] = gain_coeffs
         
-        if q%(Nsim//1000) == 0:
-            waitbar(q/Nsim)
+        if Nsim >1000:
+            
+            if q%(Nsim//1000) == 0:
+                waitbar(q/Nsim)
 
 
 cycle = np.arange(Ncyc)+1
 Fs_peak = Fs_out[-1,cycle*Nd - 1]
+Es_out = Fs_out[-1,]*(np.pi*ws**2)
+Es_peak = Fs_peak*(np.pi*ws**2)
 
 
 
