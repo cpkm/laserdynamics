@@ -215,7 +215,7 @@ z_N = np.size(z)
 #Temporal grid
 Frep = 10E3 		#target rep rate
 Ng = 40 		#number of round trips during amp
-Ncyc = 20  		#number of cycles
+Ncyc = 20  		#number of full pulse cycles
 R = 100          #pumping cycle time multiplier
 
 dt = 2*d/c 		#roundtrip cavity time is the time step
@@ -223,12 +223,12 @@ Tr = dt   		#same as dt, just notation consistency
 dT = R*dt      #time spacing for pumping segment
 
 Tdest = 1/Frep
-Tg = Ng*dt
-Tp = ((Tdest-Tg)//dT)*dT
-Np = np.int(Tp/dT)
+Tg = Ng*dt                  #gate time
+Tp = ((Tdest-Tg)//dT)*dT    #pumping-only time
+Np = np.int(Tp/dT)         #number of pumping calculations
 Td = Tp + Tg
 Nd = Np + Ng        #total calculations per cycle
-Nsim = Ncyc*Nd
+Nsim = Ncyc*Nd      #total calculations
 
 tcyc = np.concatenate([np.linspace(0,Tp,Np, endpoint = False), Tp+np.linspace(0,Tg,Ng, endpoint = False)])
 t = []
@@ -236,6 +236,8 @@ for i in range(Ncyc):
     t = np.concatenate([t,(i+1)*Td+tcyc])
 
 t_N = np.size(t)
+
+
 
 #Output variables
 n_out = np.zeros((z_N,t_N))
