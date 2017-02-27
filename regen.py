@@ -213,12 +213,12 @@ z = np.arange(0, xstal_L+dz, dz)
 z_N = np.size(z)
 
 #Temporal grid
-Frep = 1E3 		#target rep rate
-Ng = 60 		#number of round trips during amp
+Frep = 10E3 		#target rep rate
+Ng = 40 		#number of round trips during amp
 Ncyc = 20  		#number of cycles
 R = 100          #pumping cycle time multiplier
 
-dt = 2*d/c 		#roundtrip cavity time is the time step, ~10-12ns
+dt = 2*d/c 		#roundtrip cavity time is the time step
 Tr = dt   		#same as dt, just notation consistency
 dT = R*dt      #time spacing for pumping segment
 
