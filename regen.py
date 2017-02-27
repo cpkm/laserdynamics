@@ -222,7 +222,7 @@ dt = 2*d/c 		#roundtrip cavity time is the time step
 Tr = dt   		#same as dt, just notation consistency
 dT = R*dt        #time spacing for pumping segment
 
-<<<<<<< HEAD
+
 Tdest = 1/Frep
 Tg = Ng*dt                  #gate time
 Tp = ((Tdest-Tg)//dT)*dT    #pumping-only time
@@ -230,7 +230,7 @@ Np = np.int(Tp/dT)         #number of pumping calculations
 Td = Tp + Tg
 Nd = Np + Ng        #total calculations per cycle
 Nsim = Ncyc*Nd      #total calculations
-=======
+
 Tdest = 1/Frep    #estimated Td (cycle time), exact has to be calc. from round trips
 Tg = Ng*dt        #gate (amplification) time
 Tp = ((Tdest-Tg)//dT)*dT  #pump-only time
@@ -238,7 +238,6 @@ Np = np.int(Tp/dT) #number of pump timesteps
 Td = Tp + Tg      #full cyclte time
 Nd = Np + Ng        #total calculations per cycle
 Nsim = Ncyc*Nd    #total simulation steps
->>>>>>> b7319ec030f7fce7ee95ed91c4f06b7891d624d4
 
 tcyc = np.concatenate([np.linspace(0,Tp,Np, endpoint = False), Tp+np.linspace(0,Tg,Ng, endpoint = False)])
 t = []
