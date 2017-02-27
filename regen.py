@@ -128,7 +128,7 @@ def calcGain(z, n):
     return G, gain_coeffs
     
 def waitbar(progress):
-        sys.stdout.write("\rProgress: [{0:50s}] {1:.1f}%".format('#' * int(progress*50), progress*100))
+        sys.stdout.write("\rProgress: [{0:25s}] {1:.1f}%".format('#' * int(progress*25), progress*100))
         sys.stdout.flush()
 	
 
@@ -188,26 +188,26 @@ f_s = s_as/s_es
 f_p = s_ap/s_ep
 
 #parameters
-xstal_L = 5E-3	#xstal length, m
+xstal_L = 2.5E-3	#xstal length, m
 eta = 0.01		#xstal doping
 Nx = 6.3265E27	#host atom density, atoms/m**-3
 Nt = eta*Nx		#dopant atom density, atoms/m**-3
 nt = 1 			#n1+n2, total atom density ratio == 1
 
 #Beam parameters
-wp = 260.0E-6  		#pump beam radius, m
-ws = 200.0E-6  		#signal beam radius, m
+wp = 195.0E-6  		#pump beam radius, m
+ws = 190.0E-6  		#signal beam radius, m
 Pp_pump = 60.0  		#pump power (incident) in W
 Es_seed = 1.0E-8 	#seed energy in J
 
-Ip_pump = Pp_pump/(np.pi*wp**2)
-Fs_seed = Es_seed/(np.pi*ws**2)
+Ip_pump = Pp_pump/(np.pi*wp**2)    #pump intensity
+Fs_seed = Es_seed/(np.pi*ws**2)    #seed fluence
 
 #Cavity parameters
 d = 2.6			#total cavity length, m
 alpha = 0.06	#total cavity losses, fraction (0.05 = 5%)
 
-#Spacial grid
+#Crystal Spacial grid
 dz = xstal_L/300	#in m
 z = np.arange(0, xstal_L+dz, dz)
 z_N = np.size(z)
@@ -220,8 +220,9 @@ R = 100          #pumping cycle time multiplier
 
 dt = 2*d/c 		#roundtrip cavity time is the time step
 Tr = dt   		#same as dt, just notation consistency
-dT = R*dt      #time spacing for pumping segment
+dT = R*dt        #time spacing for pumping segment
 
+<<<<<<< HEAD
 Tdest = 1/Frep
 Tg = Ng*dt                  #gate time
 Tp = ((Tdest-Tg)//dT)*dT    #pumping-only time
@@ -229,6 +230,15 @@ Np = np.int(Tp/dT)         #number of pumping calculations
 Td = Tp + Tg
 Nd = Np + Ng        #total calculations per cycle
 Nsim = Ncyc*Nd      #total calculations
+=======
+Tdest = 1/Frep    #estimated Td (cycle time), exact has to be calc. from round trips
+Tg = Ng*dt        #gate (amplification) time
+Tp = ((Tdest-Tg)//dT)*dT  #pump-only time
+Np = np.int(Tp/dT) #number of pump timesteps
+Td = Tp + Tg      #full cyclte time
+Nd = Np + Ng        #total calculations per cycle
+Nsim = Ncyc*Nd    #total simulation steps
+>>>>>>> b7319ec030f7fce7ee95ed91c4f06b7891d624d4
 
 tcyc = np.concatenate([np.linspace(0,Tp,Np, endpoint = False), Tp+np.linspace(0,Tg,Ng, endpoint = False)])
 t = []
@@ -249,6 +259,7 @@ G_out = np.zeros(np.shape(t))
 Ip_cur = np.zeros(np.shape(z))
 Fs_cur = np.zeros(np.shape(z))
 
+#crystal inversion, n
 n = func()
 n.val = -f_s*nt*np.ones(np.shape(z))
 n.ind = z
@@ -259,57 +270,72 @@ G_out[0] = G
 gainCoef_out[:,0] = gain_coeffs
 
 
+#start of main loop
 for k in range(Ncyc):
-    
+
+    #low Q (pump only) phase    
     Ip_0 = Ip_pump
     Fs_0 = 0
 
     for j in range(Np):
 
         m = j + k*Nd
-
+        
+        #calculate pump/signal power
         Ip_cur = rk4(dIp, z, Ip_0, [n])
         Fs_cur = rk4(dFs, z, Fs_0, [n])
 
+        #calculate inversion
         n.val = incTime_n(n.val, dT, Fs_cur, Ip_cur)
     	
+        #set updated initial values
         Ip_out[:,m] = Ip_cur
         Fs_out[:,m] = Fs_cur
         n_out[:,m+1] = n.val
         
+        #Gain calculations (just for output, does not affect sim)
         G, gain_coeffs = calcGain(z, n.val)
         
         G_out[m+1] = G
         gainCoef_out[:,m+1] = gain_coeffs
         
+        #waitbar update
         if Nsim > 1000:
             
             if m%(Nsim//1000) == 0:
                 waitbar(m/Nsim)
             
-            
+    #high Q (amplification) phase            
     Fs_0 = Fs_seed
 
     for i in range(Ng):
 
         q = i + Np + k*Nd
-
+        
+        #calculate pump/signal power
         Ip_cur = rk4(dIp, z, Ip_0, [n])
         Fs_cur = rk4(dFs, z, Fs_0, [n])
 
+        #increment 1/2 time step
+        #calculate inversion
         n.val = incTime_n(n.val, dt/2, Fs_cur, Ip_cur)
+        #apply cavity loss
         Fs_cur = incTime_Fs(Fs_cur, dt/2)
         
+        #update intial condition
         Fs_0 = Fs_cur[-1]
 
+        #calculate pump/seed
         Ip_cur = rk4(dIp, z, Ip_0, [n])
         Fs_cur = np.flipud(rk4(dFs, np.flipud(z), Fs_0, [n], abs_x = True))
 
+        #increment 1/2 time step
         n.val = incTime_n(n.val, dt/2, Fs_cur, Ip_cur)
         Fs_cur = incTime_Fs(Fs_cur, dt/2)
         
         Fs_0 = Fs_cur[0]    
         
+        #store output values
         Ip_out[:,q] = Ip_cur
         Fs_out[:,q] = Fs_cur
         
@@ -321,12 +347,16 @@ for k in range(Ncyc):
         G_out[q] = G
         gainCoef_out[:,q] = gain_coeffs
         
+        #waitbar update
         if Nsim >1000:
             
             if q%(Nsim//1000) == 0:
                 waitbar(q/Nsim)
 
+#end of main loop
 
+
+#outputs
 cycle = np.arange(Ncyc)+1
 Fs_peak = Fs_out[-1,cycle*Nd - 1]
 Es_out = Fs_out[-1,]*(np.pi*ws**2)
