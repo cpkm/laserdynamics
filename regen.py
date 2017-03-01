@@ -31,9 +31,9 @@ dn/dt = s_ep[nt*(fp-fs) - n*(fp+1)]*Ip/hvp
 		+ s_es(1+fs)*n*Is/hvs
 		- (n+fs*nt)/tau
 
-dIp/dx = { Nt*s_ep*(n*(1-fp) + nt*(fs-fp))/(1+fs) } *Ip
+dIp/dx = { Nt*s_ep*(n*(1+fp) + nt*(fs-fp))/(1+fs) } * Ip
 
-dIs/dx = { Nt*s_es*n } *Is
+dIs/dx = { Nt*s_es*n } * Is
 
 h = Planck's const.
 vi = frequency (nu) - signal (s), pump (p)
