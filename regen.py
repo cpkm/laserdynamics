@@ -69,7 +69,7 @@ class func:
         return np.interp(x, self.ind, self.val)
 
     def diff(self):
-        self.gradient = np.gradient(self.val,self.ind) 
+        self.gradient = np.gradient(self.val)/np.gradient(self.ind)
             
     def diff_at(self,x):
         return np.interp(x,self.ind,self.gradient)
