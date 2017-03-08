@@ -61,12 +61,19 @@ import sys
 
 
 class func:
-	def __init__(self, value = None, x = None):
-	    self.val = value
-	    self.ind = x
+    def __init__(self, value = None, index = None):
+        self.val = value
+        self.ind = index
 
-	def at(self,x):
-		return np.interp(x, self.ind, self.val)
+    def at(self,x):
+        return np.interp(x, self.ind, self.val)
+
+    def diff(self):
+        self.gradient = np.gradient(self.val,self.ind) 
+            
+    def diff_at(self,x):
+        return np.interp(x,self.ind,self.gradient)
+          
 
 
 class Xstal:
@@ -95,11 +102,12 @@ class Xstal:
 
 
 
-def dIp(z, Ip, n):
+def dIp(z, Ip, n, wp):
     '''dIp/dx
     n must be a func instance (see class func:)
+    wp must be a func instance (see class func:)
     '''
-    return ((Nt*s_ep/(1+f_s))*(n.at(z)*(1+f_p) + nt*(f_s-f_p)))*Ip
+    return ((Nt*s_ep/(1+f_s))*(n.at(z)*(1+f_p) + nt*(f_s-f_p)))*Ip - (2*wp.diff_at(z)/(wp.at(z)))*Ip
 
 
 def dFs(z, Fs, n):
@@ -194,15 +202,6 @@ Nx = 6.3265E27	#host atom density, atoms/m**-3
 Nt = eta*Nx		#dopant atom density, atoms/m**-3
 nt = 1 			#n1+n2, total atom density ratio == 1
 
-#Beam parameters
-wp = 195.0E-6  		#pump beam radius, m
-ws = 190.0E-6  		#signal beam radius, m
-Pp_pump = 60.0  		#pump power (incident) in W
-Es_seed = 1.0E-8 	#seed energy in J
-
-Ip_pump = Pp_pump/(np.pi*wp**2)    #pump intensity
-Fs_seed = Es_seed/(np.pi*ws**2)    #seed fluence
-
 #Cavity parameters
 d = 2.6			#total cavity length, m
 alpha = 0.06	#total cavity losses, fraction (0.05 = 5%)
@@ -212,10 +211,25 @@ dz = xstal_L/300	#in m
 z = np.arange(0, xstal_L+dz, dz)
 z_N = np.size(z)
 
+#Beam parameters
+wp0 = 195.0E-6  		#pump beam radius, m
+zRp = 1.5E-3           #pump deam rayleigh parameter
+z0p = z[np.int(z.size/2)] #focus of pump, midpoint of crystal
+ws = 190.0E-6  		#signal beam radius, m
+Pp_pump = 60.0  		#pump power (incident) in W
+Es_seed = 1.0E-8 	#seed energy in J
+
+wp = func(wp0*(1+((z-z0p)/zRp)**2)**(1/2),z) #pump beamwaist
+wp.diff()
+
+Ip_pump = Pp_pump/(np.pi*wp.val**2)    #pump intensity
+Fs_seed = Es_seed/(np.pi*ws**2)    #seed fluence
+
+
 #Temporal grid
 Frep = 1E3 		#target rep rate
 Ng = 60 		#number of round trips during amp
-Ncyc = 20  		#number of cycles
+Ncyc = 2  		#number of cycles
 R = 100          #pumping cycle time multiplier
 
 dt = 2*d/c 		#roundtrip cavity time is the time step, ~10-12ns
@@ -262,7 +276,7 @@ gainCoef_out[:,0] = gain_coeffs
 for k in range(Ncyc):
 
     #low Q (pump only) phase    
-    Ip_0 = Ip_pump
+    Ip_0 = Ip_pump[0]
     Fs_0 = 0
 
     for j in range(Np):
@@ -270,7 +284,7 @@ for k in range(Ncyc):
         m = j + k*Nd
         
         #calculate pump/signal power
-        Ip_cur = rk4(dIp, z, Ip_0, [n])
+        Ip_cur = rk4(dIp, z, Ip_0, [n,wp])
         Fs_cur = rk4(dFs, z, Fs_0, [n])
 
         #calculate inversion
@@ -301,7 +315,7 @@ for k in range(Ncyc):
         q = i + Np + k*Nd
         
         #calculate pump/signal power
-        Ip_cur = rk4(dIp, z, Ip_0, [n])
+        Ip_cur = rk4(dIp, z, Ip_0, [n,wp])
         Fs_cur = rk4(dFs, z, Fs_0, [n])
 
         #increment 1/2 time step
@@ -314,7 +328,7 @@ for k in range(Ncyc):
         Fs_0 = Fs_cur[-1]
 
         #calculate pump/seed
-        Ip_cur = rk4(dIp, z, Ip_0, [n])
+        Ip_cur = rk4(dIp, z, Ip_0, [n,wp])
         Fs_cur = np.flipud(rk4(dFs, np.flipud(z), Fs_0, [n], abs_x = True))
 
         #increment 1/2 time step

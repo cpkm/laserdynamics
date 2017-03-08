@@ -132,7 +132,7 @@ v_s = c/l_s;            #signal freq, Hz
 
 d = 2.64         #cavity length, m
 alpha = 0.05    #cavity losses
-g0 = 0.2        #small signal gain
+g0 = 0.4        #small signal gain
 E_seed = 10E-8   #seed pulse energy in J
 w_s = 200E-6    #seed spot size
 E_sat = (np.pi*w_s**2)*h*c/(l_s*(s_es+s_as))   #saturation energy
