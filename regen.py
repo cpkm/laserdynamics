@@ -31,9 +31,9 @@ dn/dt = s_ep[nt*(fp-fs) - n*(fp+1)]*Ip/hvp
 		+ s_es(1+fs)*n*Is/hvs
 		- (n+fs*nt)/tau
 
-dIp/dx = { Nt*s_ep*(n*(1-fp) + nt*(fs-fp))/(1+fs) } *Ip
+dIp/dx = { Nt*s_ep*(n*(1+fp) + nt*(fs-fp))/(1+fs) } * Ip
 
-dIs/dx = { Nt*s_es*n } *Is
+dIs/dx = { Nt*s_es*n } * Is
 
 h = Planck's const.
 vi = frequency (nu) - signal (s), pump (p)
@@ -230,11 +230,23 @@ Fs_seed = Es_seed/(np.pi*ws**2)    #seed fluence
 Frep = 1E3 		#target rep rate
 Ng = 60 		#number of round trips during amp
 Ncyc = 2  		#number of cycles
+Frep = 10E3 		#target rep rate
+Ng = 40 		#number of round trips during amp
+Ncyc = 20  		#number of full pulse cycles
 R = 100          #pumping cycle time multiplier
 
-dt = 2*d/c 		#roundtrip cavity time is the time step, ~10-12ns
+dt = 2*d/c 		#roundtrip cavity time is the time step
 Tr = dt   		#same as dt, just notation consistency
 dT = R*dt        #time spacing for pumping segment
+
+
+Tdest = 1/Frep
+Tg = Ng*dt                  #gate time
+Tp = ((Tdest-Tg)//dT)*dT    #pumping-only time
+Np = np.int(Tp/dT)         #number of pumping calculations
+Td = Tp + Tg
+Nd = Np + Ng        #total calculations per cycle
+Nsim = Ncyc*Nd      #total calculations
 
 Tdest = 1/Frep    #estimated Td (cycle time), exact has to be calc. from round trips
 Tg = Ng*dt        #gate (amplification) time
@@ -250,6 +262,8 @@ for i in range(Ncyc):
     t = np.concatenate([t,(i+1)*Td+tcyc])
 
 t_N = np.size(t)
+
+
 
 #Output variables
 n_out = np.zeros((z_N,t_N))
