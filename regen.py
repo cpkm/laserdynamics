@@ -59,6 +59,8 @@ import scipy.integrate as integrate
 import matplotlib.pyplot as plt
 import sys
 
+from tqdm import tqdm, trange
+
 
 class func:
     def __init__(self, value = None, index = None):
@@ -196,7 +198,7 @@ f_s = s_as/s_es
 f_p = s_ap/s_ep
 
 #parameters
-xstal_L = 2.5E-3	#xstal length, m
+xstal_L = 5E-3	#xstal length, m
 eta = 0.01		#xstal doping
 Nx = 6.3265E27	#host atom density, atoms/m**-3
 Nt = eta*Nx		#dopant atom density, atoms/m**-3
@@ -204,7 +206,7 @@ nt = 1 			#n1+n2, total atom density ratio == 1
 
 #Cavity parameters
 d = 2.6			#total cavity length, m
-alpha = 0.06	#total cavity losses, fraction (0.05 = 5%)
+alpha = 0.0066	#total cavity losses, fraction (0.05 = 5%)
 
 #Crystal Spacial grid
 dz = xstal_L/300	#in m
@@ -212,11 +214,11 @@ z = np.arange(0, xstal_L+dz, dz)
 z_N = np.size(z)
 
 #Beam parameters
-wp0 = 195.0E-6  		#pump beam radius, m
+wp0 = 310.0E-6  		#pump beam radius, m
 zRp = 1.5E-3           #pump deam rayleigh parameter
 z0p = z[np.int(z.size/2)] #focus of pump, midpoint of crystal
-ws = 190.0E-6  		#signal beam radius, m
-Pp_pump = 60.0  		#pump power (incident) in W
+ws = 108.5E-6  		#signal beam radius, m
+Pp_pump = 43.5373#50.7865#36.2881#58.0356#	#pump power (incident) in W
 Es_seed = 1.0E-8 	#seed energy in J
 
 wp = func(wp0*(1+((z-z0p)/zRp)**2)**(1/2),z) #pump beamwaist
@@ -227,12 +229,9 @@ Fs_seed = Es_seed/(np.pi*ws**2)    #seed fluence
 
 
 #Temporal grid
-Frep = 1E3 		#target rep rate
-Ng = 60 		#number of round trips during amp
-Ncyc = 2  		#number of cycles
-Frep = 10E3 		#target rep rate
-Ng = 40 		#number of round trips during amp
-Ncyc = 20  		#number of full pulse cycles
+Frep = 5E3 		#target rep rate
+Ng = 120 		#number of round trips during amp
+Ncyc = 5  		#number of full pulse cycles
 R = 100          #pumping cycle time multiplier
 
 dt = 2*d/c 		#roundtrip cavity time is the time step
@@ -287,13 +286,13 @@ gainCoef_out[:,0] = gain_coeffs
 
 
 #start of main loop
-for k in range(Ncyc):
+for k in trange(Ncyc, desc='Overall'):
 
     #low Q (pump only) phase    
     Ip_0 = Ip_pump[0]
     Fs_0 = 0
 
-    for j in range(Np):
+    for j in trange(Np, desc='Low Q', leave=False):
 
         m = j + k*Nd
         
@@ -314,17 +313,12 @@ for k in range(Ncyc):
         
         G_out[m+1] = G
         gainCoef_out[:,m+1] = gain_coeffs
-        
-        #waitbar update
-        if Nsim > 1000:
-            
-            if m%(Nsim//1000) == 0:
-                waitbar(m/Nsim)
+
             
     #high Q (amplification) phase            
     Fs_0 = Fs_seed
 
-    for i in range(Ng):
+    for i in trange(Ng, desc='High Q',leave=False):
 
         q = i + Np + k*Nd
         
@@ -362,12 +356,7 @@ for k in range(Ncyc):
         
         G_out[q] = G
         gainCoef_out[:,q] = gain_coeffs
-        
-        #waitbar update
-        if Nsim >1000:
-            
-            if q%(Nsim//1000) == 0:
-                waitbar(q/Nsim)
+
 
 #end of main loop
 
