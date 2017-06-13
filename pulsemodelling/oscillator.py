@@ -70,10 +70,25 @@ def savepulse(pulse):
     pm.saveObj(pulse,filename)
 
 
+def cavity(pulse):
+    '''Define cavity round trip
+    '''
+    pulse.At = gratingPair(pulse, L, N, AOI, loss = ref_loss, return_coef = False)
+    pulse.At = propagateFiber(pulse,smf1)
+
+
+
+
 #constants
 h = 6.62606957E-34  #J*s
 c = 299792458.0     #m/s
+rt = 26.3E-9        #cavity round trip time
 
+#Define grating parameters
+L = 0.09
+N = 600
+AOI = 27
+ref_loss = 1-(1-0.3)**4
 
 #Define Pulse Object
 pulse = pm.Pulse(1.03E-6)
@@ -86,39 +101,39 @@ pulse.At = np.sqrt(P_peak)*(sp.exp(-(1/(2*T0**2))*(1+1j*chirp0)*pulse.time**(2*m
 
 
 #Define fiber components
-pm980 = pm.Fiber(32.8+2)
-pm980.alpha = 0.000576
-pm980.beta = np.array([0.0251222977, 4.5522276126132602e-05, -5.0542788517531417e-08])*(1E-12)**(np.array([2,3,4]))
-pm980.gamma = 0.00045
-pm980.core_d = 5.5E-6
+smf1 = pm.Fiber(1.0)
+smf1.alpha = 0.000576
+smf1.beta = np.array([0.0251222977, 4.5522276126132602e-05, -5.0542788517531417e-08])*(1E-12)**(np.array([2,3,4]))
+smf1.gamma = 0.00045
+smf1.core_d = 5.5E-6
 
-#reduced core strtching fibre
-rcf = pm.Fiber(144.9)
-rcf.alpha = 0.001
-rcf.beta = np.array([0.109130356, -0.000804507458, 0])*(1E-12)**(np.array([2,3,4]))
-rcf.gamma = 0.00045*(6.0/2.9)**2
-rcf.core_d = 2.9E-6
+smf2 = pm.Fiber(1.0)
+smf2.alpha = 0.000576
+smf2.beta = np.array([0.0251222977, 4.5522276126132602e-05, -5.0542788517531417e-08])*(1E-12)**(np.array([2,3,4]))
+smf2.gamma = 0.00045
+smf2.core_d = 5.5E-6
+
+smf3 = pm.Fiber(1.0)
+smf3.alpha = 0.000576
+smf3.beta = np.array([0.0251222977, 4.5522276126132602e-05, -5.0542788517531417e-08])*(1E-12)**(np.array([2,3,4]))
+smf3.gamma = 0.00045
+smf3.core_d = 5.5E-6
+
 
 #gain fiber, nufern ysf-HI
-gf1 = pm.FiberGain(0.6)
-gf1.alpha = 0.00345
-gf1.beta = np.array([0.0251222977, 4.5522276126132602e-05, -5.0542788517531417e-08])*(1E-12)**(np.array([2,3,4]))
-gf1.gamma = 0.00045
-gf1.sigma_a = np.array([3.04306,0.04966])*1E-24
-gf1.sigma_e = np.array([3.17025,0.59601])*1E-24
-gf1.lambdas = np.array([0.976,1.030])*1E-6
-gf1.core_d = 6.0E-6
-gf1.N = 1.891669E25
+ydf1 = pm.FiberGain(0.6)
+ydf1.alpha = 0.00345
+ydf1.beta = np.array([0.0251222977, 4.5522276126132602e-05, -5.0542788517531417e-08])*(1E-12)**(np.array([2,3,4]))
+ydf1.gamma = 0.00045
+ydf1.sigma_a = np.array([3.04306,0.04966])*1E-24
+ydf1.sigma_e = np.array([3.17025,0.59601])*1E-24
+ydf1.lambdas = np.array([0.976,1.030])*1E-6
+ydf1.core_d = 6.0E-6
+ydf1.N = 1.891669E25
 
 #Pump parameters
-pa1P = 0.5    #preamp1 pump power, CW
-pa1F = 40E6    #rep. rate at preamp1
+p1P = 0.7    #pump power, CW
 
-pa2P = 0.5    #preamp2 pump power, CW
-pa2F = 500E3    #rep. rate at preamp2
-
-lcaP = 25    #large core amp pump poer
-lcaF = 500E3    #rep. rate at lca
 
 #save initial pulse
 savepulse(pulse)
