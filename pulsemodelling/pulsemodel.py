@@ -12,18 +12,14 @@ change the object's parameters in the primary script
 """
 
 import numpy as np
-import scipy as sp
-import matplotlib.pyplot as plt
-from matplotlib.pyplot import cm 
-
-import sys
-import inspect
 import pickle
 
 
 #constants
 h = 6.62606957E-34  #J*s
 c = 299792458.0     #m/s
+mu0 = np.pi*4E-7               #magnetic constant (permeability), N*A-2
+eps0 = 1/(np.pi*4E-7*c**2)         #electric constant (permitivity), F*m-1
 
 
 class func:
@@ -42,7 +38,7 @@ class Pulse:
     Defines a Pulse object
     .time = time array (s)
     .freq = corresponding angular freq array (rad/s)
-    .At = time domain Field
+    .At = time domain Field, units sqrt(power) i.e. |At|**2 = power
     .Af = freq domain Field (redundant, removed)
     .lambda0 = central wavelength of pulse
 
@@ -70,7 +66,7 @@ class Pulse:
         self.dt = dtau
 
     def getAf(self):
-        return ((self.dt*self.nt)/(sp.sqrt(2*np.pi)))*np.fft.ifft(self.At)
+        return ((self.dt*self.nt)/(np.sqrt(2*np.pi)))*np.fft.ifft(self.At)
 
     def copyPulse(self, new_At = None):
         '''
@@ -583,26 +579,22 @@ def opticalFilter(pulse, filter_type, lambda0 = None, bandwidth = 2E-9, loss = 0
         long-pass, pass low freq
         w0-w is (+) for w<w0 (pass region)
         '''
-        filter_profile = 0.5 * (np.sign(w0-w) + 1)
+        filter_profile = 0.5*(np.sign(w0-w) + 1)
 
     elif filter_type.lower() == 'spf':
         '''
         short-pass, pass high freq
         w-w0 is (+) for w>w0 (pass region)
         '''
-        filter_profile = 0.5 * (np.sign(w-w0) + 1)
+        filter_profile = 0.5*(np.sign(w-w0) + 1)
 
     elif filter_type.lower() == 'bpf':
         '''
         bandpass
         '''
-        #prevent divide by 0
-        if bandwidth == 0:
-            bandwidth = 2E-9
-
         dw = w0*(bandwidth/lambda0)
 
-        filter_profile = (0.5 * (np.sign(w0-w+dw/2) + 1))*(0.5 * (np.sign(w-w0+dw/2) + 1))
+        filter_profile = (0.5*(np.sign(w0-w+dw/2) + 1))*(0.5 * (np.sign(w-w0+dw/2) + 1))
 
     else:
         '''
@@ -615,7 +607,7 @@ def opticalFilter(pulse, filter_type, lambda0 = None, bandwidth = 2E-9, loss = 0
     return output_At
 
 
-def propagateFiber  (pulse, fiber, autodz = False):
+def propagateFiber (pulse, fiber, autodz = False):
     '''This function will propagate the input field along the length of...
     a fibre with the given properties...
 
@@ -636,8 +628,7 @@ def propagateFiber  (pulse, fiber, autodz = False):
     Warning: setting autodz = True will modify fiber object!!!
     autodz uses calcZGrid to calculate dz based on the input pulse and fiber
     Should not be used for gain fiber!!!, since gain calc depends on dz as well
-    ''' 
-    #calculate 
+    '''  
     if autodz:
         dz = calcZGrid(fiber,pulse)
         fiber.initializeGrid(fiber.length, 'abs', dz)
@@ -690,10 +681,30 @@ def propagateFiber  (pulse, fiber, autodz = False):
         At = np.fft.fft(Af)
         At = At*np.exp(N*dz[i]*np.abs(At)**2)
 
+    #Final Propagation steps
     Af = np.fft.ifft(At)
     Af = Af*np.exp(D[-1]*dz[-1])
     At = np.fft.fft(Af)
     outputField = At*np.exp(np.abs(At)**2*N*dz[-1]/2)
     
-    return(outputField)
+    return outputField
     
+
+def satAbs(pulse,sat_int,spot_size,mod_depth=1,loss=0):
+    ''' Simulate saturable absorber.
+    sat_int = saturation intensity, J/m**2
+    spot_size = beam diameter
+    mod_depth = modulation depth, ratio e.g. 1% -> 0.01
+    loss = non saturable losses
+
+    small signal -> refl ~ 1-loss-mod_depth
+    high signal --> refl ~ 1-loss
+    '''
+    intensity = np.abs(pulse.At)**2/(np.pi*(spot_size/2)**2)
+    outputField = np.sqrt(1-loss)*At*(1-mod_depth/(1+intensity/sat_int));
+
+    return outputField
+
+
+
+
