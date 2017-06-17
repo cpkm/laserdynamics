@@ -690,7 +690,7 @@ def propagateFiber (pulse, fiber, autodz = False):
     return outputField
     
 
-def satAbs(pulse,sat_int,spot_size,mod_depth=1,loss=0):
+def saturableAbs(pulse,sat_int,spot_size,mod_depth=1,loss=0):
     ''' Simulate saturable absorber.
     sat_int = saturation intensity, J/m**2
     spot_size = beam diameter
@@ -701,7 +701,7 @@ def satAbs(pulse,sat_int,spot_size,mod_depth=1,loss=0):
     high signal --> refl ~ 1-loss
     '''
     intensity = np.abs(pulse.At)**2/(np.pi*(spot_size/2)**2)
-    outputField = np.sqrt(1-loss)*At*(1-mod_depth/(1+intensity/sat_int));
+    outputField = np.sqrt(1-loss)*At*np.sqrt((1-mod_depth/(1+intensity/sat_int)))
 
     return outputField
 

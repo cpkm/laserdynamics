@@ -20,6 +20,7 @@ Everything is in SI units: m,s,W,J etc.
 import numpy as np
 import scipy as sp
 import matplotlib.pyplot as plt
+
 import pulsemodel as pm
 
 import sys
@@ -72,9 +73,23 @@ def savepulse(pulse):
 
 def cavity(pulse):
     '''Define cavity round trip
+
+    returns:
+        pulse.At = current pulse profile
+        output_At = cavity output (outcoupled) profile
     '''
-    pulse.At = gratingPair(pulse, L, N, AOI, loss = ref_loss, return_coef = False)
+    #create empty pulse
+    null_pulse = pulse.copyPulse(pulse,0*pulse.At)
+
+    pulse.At = gratingPair(pulse, L_g, N_g, AOI_g, loss = ref_loss_g, return_coef = False)
     pulse.At = propagateFiber(pulse,smf1)
+    pulse.At = propagateFiber(pulse,ydf1)
+    pulse.At = propagateFiber(pulse,smf2)
+    pulse.At = saturableAbs(pulse,sat_int_sa,d_sa,mod_depth_sa,loss_sa)
+    pulse.At, output_At = coupler2x2(pulse,null_pulse)
+
+    return pulse.At, output_At
+
 
 
 
@@ -82,13 +97,8 @@ def cavity(pulse):
 #constants
 h = 6.62606957E-34  #J*s
 c = 299792458.0     #m/s
-rt = 26.3E-9        #cavity round trip time
+tau_rt = 26.3E-9        #cavity round trip time
 
-#Define grating parameters
-L = 0.09
-N = 600
-AOI = 27
-ref_loss = 1-(1-0.3)**4
 
 #Define Pulse Object
 pulse = pm.Pulse(1.03E-6)
@@ -131,10 +141,24 @@ ydf1.lambdas = np.array([0.976,1.030])*1E-6
 ydf1.core_d = 6.0E-6
 ydf1.N = 1.891669E25
 
+
+#Define grating parameters
+L_g = 0.09
+N_g = 600
+AOI_g = 27
+ref_loss_g = 1-(1-0.3)**4
+
+#Define Saturable absorber parameters. Mimic 1040-15-500fs from BATOP
+sat_int_sa = 50E-10     #uJ/cm**2 = 1E-10 J/m**2
+d_sa = np.pi*(3E-6)**2  #~6um diameter fiber
+mod_depth_sa = 0.08
+loss_sa = 0.07
+
+
 #Pump parameters
 p1P = 0.7    #pump power, CW
 
-
+'''
 #save initial pulse
 savepulse(pulse)
 
@@ -173,6 +197,8 @@ pulse.At = pm.propagateFiber(pulse,plma,True)
 savepulse(pulse)
 pulse.At = pm.propagateFiber(pulse,lcfa)
 savepulse(pulse)
+
+'''
 
 '''
 #Plotting
