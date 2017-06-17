@@ -86,7 +86,7 @@ def cavity(pulse):
     pulse.At = propagateFiber(pulse,ydf1)
     pulse.At = propagateFiber(pulse,smf2)
     pulse.At = saturableAbs(pulse,sat_int_sa,d_sa,mod_depth_sa,loss_sa)
-    pulse.At, output_At = coupler2x2(pulse,null_pulse)
+    pulse.At, output_At = coupler2x2(pulse,None,coupler=0.25)
 
     return pulse.At, output_At
 

@@ -535,7 +535,7 @@ def powerTap(pulse, tap, loss = 0):
 def coupler2x2(pulse1, pulse2, tap, loss = 0):
     '''Simulates splitter/coupler
     requires 2 pulses, outputs 2 pulses.
-    should be able to send 'null pulse' in out terminal to sim single input
+    set either pulse to None for 'splitter' behaviour
 
     B(pulse2)-----[=======]-----SignalA, tapB
                   [==2x2==]
@@ -545,10 +545,18 @@ def coupler2x2(pulse1, pulse2, tap, loss = 0):
     pulse1 goes to output_tap with tap
     pulse2 goes to output_tap with tap
     pulse2 goes to output_sig with (1-tap)
-    '''
 
-    At1 = np.sqrt(1-loss)*pulse1.At
-    At2 = np.sqrt(1-loss)*pulse2.At
+    tap can be concidered output coupler value
+    '''
+    if pulse1 is None:
+        At1 = 0
+    else:
+        At1 = np.sqrt(1-loss)*pulse1.At
+
+    if pulse1 is None:
+        At2 = 0
+    else:
+        At2 = np.sqrt(1-loss)*pulse2.At
 
     output_signal = np.sqrt(1-tap/100)*At1 + 1j*np.sqrt(tap/100)*At2
     output_tap = np.sqrt(1-tap/100)*At2 + 1j*np.sqrt(tap/100)*At1
