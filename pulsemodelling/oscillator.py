@@ -71,27 +71,22 @@ def savepulse(pulse):
     pm.saveObj(pulse,filename)
 
 
-def cavity(pulse):
+def cavity(pulse,auto_z_step=False):
     '''Define cavity round trip
 
     returns:
         pulse.At = current pulse profile
         output_At = cavity output (outcoupled) profile
     '''
-    #create empty pulse
-    null_pulse = pulse.copyPulse(pulse,0*pulse.At)
+    At = pulse.At
+    At = pm.gratingPair(pulse, L_g, N_g, AOI_g, loss = ref_loss_g, return_coef = False)
+    At = pm.propagateFiber(pulse,smf1,autodz=auto_z_step)
+    At = pm.propagateFiber(pulse,ydf1,autodz=auto_z_step)
+    At = pm.propagateFiber(pulse,smf2,autodz=auto_z_step)
+    At = pm.saturableAbs(pulse,sat_int_sa,d_sa,mod_depth_sa,loss_sa)
+    At, output_At = pm.coupler2x2(pulse,None,tap=0.25)
 
-    pulse.At = gratingPair(pulse, L_g, N_g, AOI_g, loss = ref_loss_g, return_coef = False)
-    pulse.At = propagateFiber(pulse,smf1)
-    pulse.At = propagateFiber(pulse,ydf1)
-    pulse.At = propagateFiber(pulse,smf2)
-    pulse.At = saturableAbs(pulse,sat_int_sa,d_sa,mod_depth_sa,loss_sa)
-    pulse.At, output_At = coupler2x2(pulse,None,coupler=0.25)
-
-    return pulse.At, output_At
-
-
-
+    return At, output_At
 
 
 #constants

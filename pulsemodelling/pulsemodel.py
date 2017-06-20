@@ -14,6 +14,8 @@ change the object's parameters in the primary script
 import numpy as np
 import pickle
 
+from tqdm import tqdm
+
 
 #constants
 h = 6.62606957E-34  #J*s
@@ -80,7 +82,7 @@ class Pulse:
         new_pulse.nt = self.nt
         new_pulse.dt = self.dt
 
-        if new_At == None:
+        if new_At is None:
             new_pulse.At = self.At
         else:
             new_pulse.At = new_At
@@ -328,7 +330,11 @@ def rmswidth(x,F):
     
     
 def calcZGrid(fiber,pulse, res = 'med'):
-    
+    '''Autocalculation of zgrid of Fiber.
+    fiber = class Fiber() or FiberGain() instance
+    pulse = class Pulse() instance
+    res = resolution, either numeric or string
+    '''
     if isinstance(res, str):
         if res.lower() == 'low':
             n = 10
@@ -341,7 +347,10 @@ def calcZGrid(fiber,pulse, res = 'med'):
         
     elif isinstance(res, int) or isinstance(res, float):
         n = res//1
-                        
+    
+    if n==0:
+        n = 1
+
     _, t0 = rmswidth(pulse.time, np.abs(pulse.At))
     p0 = (np.abs(pulse.At)**2).max()
     
@@ -399,7 +408,7 @@ def calcGain(fiber, Pp, Ps, pump_scheme = 'core', pump_dir = 'forward', method =
 
     if method.lower() in {'simple', 's'}:
     #simple integration for intensities and n
-        for i in range(np.size(g)):
+        for i in tqdm(range(np.size(g)),desc='Calculate Gain',leave=False):
 
             n = (a_p*Ip + a_s*Is)/(b_p*Ip + b_s*Is + 1/tau_se)
             
@@ -438,7 +447,7 @@ def calcGain(fiber, Pp, Ps, pump_scheme = 'core', pump_dir = 'forward', method =
 
             p_gain = c_gain
             
-            for i in range(np.size(fiber.z)):
+            for i in tqdm(range(np.size(fiber.z)),desc='Calculate Gain',leave=False):
                 Is = Isig + Iasef + Iaseb
                 n.val[i] = (a_p*Ip[i] + a_s*Is[i])/(b_p*Ip[i] + b_s*Is[i] + 1/tau_se)
                 
@@ -553,7 +562,7 @@ def coupler2x2(pulse1, pulse2, tap, loss = 0):
     else:
         At1 = np.sqrt(1-loss)*pulse1.At
 
-    if pulse1 is None:
+    if pulse2 is None:
         At2 = 0
     else:
         At2 = np.sqrt(1-loss)*pulse2.At
@@ -637,8 +646,15 @@ def propagateFiber (pulse, fiber, autodz = False):
     autodz uses calcZGrid to calculate dz based on the input pulse and fiber
     Should not be used for gain fiber!!!, since gain calc depends on dz as well
     '''  
-    if autodz:
-        dz = calcZGrid(fiber,pulse)
+    if autodz == False:
+        pass
+    else:
+        try:
+            res = autodz//1
+        except TypeError:
+            res = 'med'
+
+        dz = calcZGrid(fiber,pulse,res)
         fiber.initializeGrid(fiber.length, 'abs', dz)
     
     #Pulse inputs
@@ -680,7 +696,7 @@ def propagateFiber (pulse, fiber, autodz = False):
     
     #Main propagation loop
     At = pulse.At*np.exp(np.abs(pulse.At)**2*N*dz[0]/2)
-    for i in range(nz-1):
+    for i in tqdm(range(nz-1),desc='Progagate Fiber',leave=False):
         
         D = G[i] + B
        
@@ -709,7 +725,7 @@ def saturableAbs(pulse,sat_int,spot_size,mod_depth=1,loss=0):
     high signal --> refl ~ 1-loss
     '''
     intensity = np.abs(pulse.At)**2/(np.pi*(spot_size/2)**2)
-    outputField = np.sqrt(1-loss)*At*np.sqrt((1-mod_depth/(1+intensity/sat_int)))
+    outputField = np.sqrt(1-loss)*pulse.At*np.sqrt((1-mod_depth/(1+intensity/sat_int)))
 
     return outputField
 
