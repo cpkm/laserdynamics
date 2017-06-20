@@ -23,6 +23,8 @@ import matplotlib.pyplot as plt
 
 import pulsemodel as pm
 
+from tqdm import tqdm, trange
+
 import sys
 import shutil
 import glob
@@ -55,10 +57,10 @@ fileext = '.pkl'
 output_num = 0
 filename =  filebase + 'pulse' + str(output_num).zfill(3) + fileext
 
-shutil.copy(__file__, result_folder + '/' + os.path.basename(__file__))
+#shutil.copy(__file__, result_folder + '/' + os.path.basename(__file__))
 
 
-def savepulse(pulse):
+def savepulse(pulse, name='pulse'):
     '''
     to be used locally only
     all file/folder names must be previously defined
@@ -67,26 +69,60 @@ def savepulse(pulse):
     
     while not not glob.glob(filename):
         output_num = output_num + 1
-        filename = filebase + 'pulse' + str(output_num).zfill(3) + fileext
+        filename = filebase + name + str(output_num).zfill(3) + fileext
     pm.saveObj(pulse,filename)
 
 
 def cavity(pulse,auto_z_step=False):
     '''Define cavity round trip
-
+    NOTE: pulse object is modified!!!
     returns:
         pulse.At = current pulse profile
         output_At = cavity output (outcoupled) profile
     '''
-    At = pulse.At
-    At = pm.gratingPair(pulse, L_g, N_g, AOI_g, loss = ref_loss_g, return_coef = False)
-    At = pm.propagateFiber(pulse,smf1,autodz=auto_z_step)
-    At = pm.propagateFiber(pulse,ydf1,autodz=auto_z_step)
-    At = pm.propagateFiber(pulse,smf2,autodz=auto_z_step)
-    At = pm.saturableAbs(pulse,sat_int_sa,d_sa,mod_depth_sa,loss_sa)
-    At, output_At = pm.coupler2x2(pulse,None,tap=0.25)
 
-    return At, output_At
+    #plt.plot(np.abs(pulse.At)**2, label='input')
+    pulse.At = pm.gratingPair(pulse, L_g, N_g, AOI_g, loss = ref_loss_g, return_coef = False)
+    #plt.plot(np.abs(pulse.At)**2,label='grating')
+    pulse.At = pm.propagateFiber(pulse,smf1,autodz=auto_z_step)
+    #plt.plot(np.abs(pulse.At)**2,label='smf1')
+
+    Ps = np.sum(np.abs(pulse.At)**2)*pulse.dt/tau_rt
+    ydf1.gain = pm.calcGain(ydf1,p1P,Ps)
+    pulse.At = pm.propagateFiber(pulse,ydf1,autodz=auto_z_step)
+    #plt.plot(np.abs(pulse.At)**2,label='ydf')
+
+    pulse.At = pm.propagateFiber(pulse,smf2,autodz=auto_z_step)
+    #plt.plot(np.abs(pulse.At)**2,label='smf2')
+    pulse.At = pm.saturableAbs(pulse,sat_int_sa,d_sa,mod_depth_sa,loss_sa)
+    #plt.plot(np.abs(pulse.At)**2, label='satABs')
+    pulse.At, output_At = pm.coupler2x2(pulse,None,tap=25)
+    #plt.plot(np.abs(pulse.At)**2, label='output')
+    #plt.legend()
+    #plt.show()
+
+    return pulse.At, output_At
+
+
+def run_sim(pulse, max_iter=100, err_thresh=1E-6, auto_z_step=False):
+
+    savepulse(pulse,name='cavity')
+    t = trange(max_iter, desc='Total progress')
+    t.set_postfix(str='{:.1e}'.format(0))
+    for i in t:
+        input_At = pulse.At
+        cavity_At, output_At = cavity(pulse, auto_z_step)
+
+        savepulse(pulse, name='cavity')
+        savepulse(pulse.copyPulse(output_At), name='output')
+
+        area = np.sum(np.abs(input_At)**2)
+        err = (np.sum((np.abs(pulse.At)**2-np.abs(input_At)**2)*np.abs(input_At)**2))**(1/2)
+
+        if err/area < err_thresh:
+            break
+
+        t.set_postfix(str='{:.1e}'.format(err/area))
 
 
 #constants
@@ -101,9 +137,10 @@ pulse.initializeGrid(18, 1.5E-9)
 T0 = 100E-15
 mshape = 1
 chirp0 = 0
-P_peak = 10E0   #peak power, 10kW corresp. to 1ps pulse, 400mW avg, 40MHz - high end of act. oscillator
+P_peak = 1E3   #peak power, 10kW corresp. to 1ps pulse, 400mW avg, 40MHz - high end of act. oscillator
 pulse.At = np.sqrt(P_peak)*(sp.exp(-(1/(2*T0**2))*(1+1j*chirp0)*pulse.time**(2*mshape)))
 
+input_pulse = pulse.copyPulse()
 
 #Define fiber components
 smf1 = pm.Fiber(1.0)
