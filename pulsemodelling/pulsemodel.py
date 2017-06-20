@@ -648,6 +648,8 @@ def propagateFiber (pulse, fiber, autodz = False):
     '''  
     if autodz == False:
         pass
+    elif autodz is True:
+        res = 'med'
     else:
         try:
             res = autodz//1
