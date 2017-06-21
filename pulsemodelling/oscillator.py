@@ -57,7 +57,7 @@ fileext = '.pkl'
 output_num = 0
 filename =  filebase + 'pulse' + str(output_num).zfill(3) + fileext
 
-#shutil.copy(__file__, result_folder + '/' + os.path.basename(__file__))
+shutil.copy(__file__, result_folder + '/' + os.path.basename(__file__))
 
 
 def savepulse(pulse, name='pulse'):
@@ -89,7 +89,7 @@ def cavity(pulse,auto_z_step=False):
 
     Ps = np.sum(np.abs(pulse.At)**2)*pulse.dt/tau_rt
     ydf1.gain = pm.calcGain(ydf1,p1P,Ps)
-    pulse.At = pm.propagateFiber(pulse,ydf1,autodz=auto_z_step)
+    pulse.At = pm.propagateFiber(pulse,ydf1,autodz=False)
     #plt.plot(np.abs(pulse.At)**2,label='ydf')
 
     pulse.At = pm.propagateFiber(pulse,smf2,autodz=auto_z_step)
@@ -116,13 +116,30 @@ def run_sim(pulse, max_iter=100, err_thresh=1E-6, auto_z_step=False):
         savepulse(pulse, name='cavity')
         savepulse(pulse.copyPulse(output_At), name='output')
 
-        area = np.sum(np.abs(input_At)**2)
-        err = (np.sum((np.abs(pulse.At)**2-np.abs(input_At)**2)*np.abs(input_At)**2))**(1/2)
+        power_in = np.abs(input_At)**2
+        power_out = np.abs(pulse.At)**2
 
-        if err/area < err_thresh:
+        test = check_residuals(power_in,power_out,
+            integ_err=err_thresh, p2p_err=err_thresh*)
+
+        if test[0]:
             break
 
-        t.set_postfix(str='{:.1e}'.format(err/area))
+        t.set_postfix(str='{:.1e},{:.1e}'.format(test[1],test[2]))
+
+
+def check_residuals(initial, final, integ_err=1E-4, p2p_err=1E-4):
+    '''Check residuals for covergence test.
+    Return True if pass. False if fail.
+    '''
+    res = (initial-final)
+    p2p = np.abs(res).max()/initial.max()
+    integ = (np.sum(np.abs(res)**2)**(1/2))/np.sum(initial)
+
+    if p2p < p2p_err and integ < integ_err:
+        return True,integ,p2p
+    else:
+        return False,integ,p2p
 
 
 #constants
@@ -163,7 +180,7 @@ smf3.core_d = 5.5E-6
 
 
 #gain fiber, nufern ysf-HI
-ydf1 = pm.FiberGain(0.6)
+ydf1 = pm.FiberGain(0.6, grid_type='rel',z_grid=100)
 ydf1.alpha = 0.00345
 ydf1.beta = np.array([0.0251222977, 4.5522276126132602e-05, -5.0542788517531417e-08])*(1E-12)**(np.array([2,3,4]))
 ydf1.gamma = 0.00045
@@ -188,7 +205,7 @@ loss_sa = 0.07
 
 
 #Pump parameters
-p1P = 0.7    #pump power, CW
+p1P = 0.3    #pump power, CW
 
 '''
 #save initial pulse
