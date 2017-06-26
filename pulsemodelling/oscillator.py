@@ -120,7 +120,7 @@ def run_sim(pulse, max_iter=100, err_thresh=1E-6, auto_z_step=False):
         power_out = np.abs(pulse.At)**2
 
         test = check_residuals(power_in,power_out,
-            integ_err=err_thresh, p2p_err=err_thresh*)
+            integ_err=err_thresh, p2p_err=err_thresh)
 
         if test[0]:
             break
@@ -151,16 +151,16 @@ tau_rt = 26.3E-9        #cavity round trip time
 #Define Pulse Object
 pulse = pm.Pulse(1.03E-6)
 pulse.initializeGrid(18, 1.5E-9)
-T0 = 100E-15
+T0 = 1000E-15
 mshape = 1
 chirp0 = 0
-P_peak = 1E3   #peak power, 10kW corresp. to 1ps pulse, 400mW avg, 40MHz - high end of act. oscillator
+P_peak = 10E3   #peak power, 10kW corresp. to 1ps pulse, 400mW avg, 40MHz - high end of act. oscillator
 pulse.At = np.sqrt(P_peak)*(sp.exp(-(1/(2*T0**2))*(1+1j*chirp0)*pulse.time**(2*mshape)))
 
 input_pulse = pulse.copyPulse()
 
 #Define fiber components
-smf1 = pm.Fiber(1.0)
+smf1 = pm.Fiber(2.0)
 smf1.alpha = 0.000576
 smf1.beta = np.array([0.0251222977, 4.5522276126132602e-05, -5.0542788517531417e-08])*(1E-12)**(np.array([2,3,4]))
 smf1.gamma = 0.00045
@@ -205,7 +205,7 @@ loss_sa = 0.07
 
 
 #Pump parameters
-p1P = 0.3    #pump power, CW
+p1P = 0.0    #pump power, CW
 
 '''
 #save initial pulse

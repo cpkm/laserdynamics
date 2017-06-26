@@ -70,6 +70,8 @@ class Pulse:
     def getAf(self):
         return ((self.dt*self.nt)/(np.sqrt(2*np.pi)))*np.fft.ifft(self.At)
 
+    
+
     def copyPulse(self, new_At = None):
         '''
         Duplicates pulse, outputs new pulse instance
@@ -356,7 +358,6 @@ def calcZGrid(fiber,pulse, res = 'med'):
     
     ld = t0**2/(np.abs(fiber.beta[0]))
     ln = 1/(p0*fiber.gamma)
-    
     l_ref = 1/((1/ld)+(1/ln))
     
     return l_ref/n
@@ -645,16 +646,17 @@ def propagateFiber (pulse, fiber, autodz = False):
     Warning: setting autodz = True will modify fiber object!!!
     autodz uses calcZGrid to calculate dz based on the input pulse and fiber
     Should not be used for gain fiber!!!, since gain calc depends on dz as well
-    '''  
+    ''' 
     if autodz == False:
         pass
-    elif autodz is True:
-        res = 'med'
     else:
-        try:
-            res = autodz//1
-        except TypeError:
+        if autodz is True:
             res = 'med'
+        else:
+            try:
+                res = autodz//1
+            except TypeError:
+                res = 'med'
 
         dz = calcZGrid(fiber,pulse,res)
         fiber.initializeGrid(fiber.length, 'abs', dz)
