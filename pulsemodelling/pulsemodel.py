@@ -68,14 +68,22 @@ class Pulse:
         self.dt = dtau
 
     def getAf(self):
+        '''Return Af, spectral field.
+        '''
         return ((self.dt*self.nt)/(np.sqrt(2*np.pi)))*np.fft.ifft(self.At)
 
     def getPt(self):
+        '''Return Power, time domain.
+        '''
         return np.abs(self.At)**2
 
-    def copyPulse(self, new_At = None):
+    def getPf(self):
+        '''Return Pf, power spectral density.
         '''
-        Duplicates pulse, outputs new pulse instance
+        return np.abs(self.getAf())**2
+
+    def copyPulse(self, new_At = None):
+        '''Duplicates pulse, outputs new pulse instance.
         Can set new At at same time by sending new_At. If not sent, new_pulse.At is same
         '''
 
@@ -94,12 +102,11 @@ class Pulse:
 
 
 class Fiber:
-    '''
-    Defines a Fiber object
+    '''Defines a Fiber object.
     .length = length of fiber (m)
     .alpha = loss coefficient (m^-1), +alpha means loss
     .beta = dispersion parameters, 2nd 3rd 4th order. array
-    .gamma = nonlinear parameter, (W*m)^-1\
+    .gamma = nonlinear parameter, (W*m)^-1
     
     can be used for simple gain fiber by using alpha (-alpha = gain-loss)
 
@@ -113,7 +120,6 @@ class Fiber:
     z_grid is either the grid spacing (abs) or number of grid points (rel)
 
     '''
-
     Z_STP_DEFAULT = 0.003  #default grid size, in m, 3mm
     Z_NUM_DEFAULT = 300     #default number of grid points, 300
 
@@ -209,6 +215,7 @@ class FiberGain:
         self.core_d = self.CORE_D_DEFAULT
         self.clad_d = self.CLAD_D_DEFAULT
 
+        self.z = np.arange(1)
         self.initializeGrid(self.length, grid_type, z_grid)
 
 
@@ -218,8 +225,8 @@ class FiberGain:
         -can be called and re-called at any time (even after creation)
         -must provide fiber length, self.length is redefined when initializeGrid is called
         '''
-
         self.length = length
+        old_z = self.z
 
         if grid_type.lower() == 'abs':
             #grid type is 'absolute', z_grid is grid spacing
@@ -238,7 +245,17 @@ class FiberGain:
             dz = self.length/z_grid   #position step size
             self.z = dz*np.arange(0, z_grid)    #position array
 
-
+        if np.size(self.gain) is 1:
+            self.gain = self.gain*np.ones(np.size(self.z))
+        elif np.size(self.gain) is np.size(old_z):
+            self.gain = np.interp(self.z,old_z,self.gain)
+        elif np.size(self.gain) < np.size(old_z):
+            self.gain = np.interp(self.z,old_z[:np.size(self.gain)],self.gain)
+        elif np.size(self.gain) > np.size(old_z):
+            self.gain = np.interp(self.z,old_z,self.gain[:np.size(old_z)])
+        else:
+            self.gain = np.zeros(np.size(self.z))
+            
 
 def rk4(f, x, y0, const_args = [], abs_x = False):
     '''
@@ -330,6 +347,102 @@ def rmswidth(x,F):
     
     #returns avg and rms width
     return(mu, np.sqrt(var))
+ 
+
+def propagateFiber (pulse, fiber, autodz = False):
+    '''This function will propagate the input field along the length of...
+    a fibre with the given properties...
+
+    # Pulse propagation via Nonlinear Schrodinger Equation (NLSE)
+    # dA/dz = -ib2/2 (d^2A/dtau^2) + b3/6 (d^3 A/dtau^3) -aplha/2 + ig|A|^2*A  
+    # --> A is field A = sqrt(P0)*u
+
+    Requires a Pulse class object and Fiber class object. Fiber can also be FiberGain class
+
+    Inputs:
+    pulse = Pulse class object
+    fiber = Fiber class object (Fiber or FiberGain)
+    autodz = optional to automatically calc z_grid. 
+        False - no change to fiber z_grid
+        True - autocalculates, sets to medium resolution (35 points per Lref)
+        N - integer, autocalculates sets res to N points per Lref
+   
+    Outputs:
+    outputField = time domain output field, At
+    
+    Warning: setting autodz = True will modify fiber object!!!
+    autodz uses calcZGrid to calculate dz based on the input pulse and fiber
+    Should not be used for gain fiber!!!, since gain calc depends on dz as well
+    ''' 
+    if autodz == False:
+        pass
+    else:
+        if autodz is True:
+            res = 'med'
+        else:
+            try:
+                res = autodz//1
+            except TypeError:
+                res = 'med'
+
+        dz = calcZGrid(fiber,pulse,res)
+        fiber.initializeGrid(fiber.length, 'abs', dz)
+    
+    #Pulse inputs
+    #nt = pulse.nt
+    #tau = pulse.time
+    #dtau = pulse.dt
+    omega = pulse.freq
+
+    #fiber inputs
+    nz = np.size(fiber.z)
+    dz = np.gradient(fiber.z)   #position step size
+
+    #compile losses(alpha) and gain appropriately, result should have same dim as fiber.z
+    if type(fiber) is Fiber:
+        #Fiber does not have inherent gain parameter, thus gain is set to 0
+        gain = np.zeros(np.shape(fiber.z))
+    elif type(fiber) is FiberGain:
+        #FiberGain has gain parameter
+        #if fiber.gain is const, this creates a const arrray, if .gain is an array this is simply X 1
+        gain = np.ones(np.shape(fiber.z))*fiber.gain
+    else:
+        #Don't know when this would apply
+        gain = np.zeros(np.shape(fiber.z))
+
+    #combined loss and gain, will be array same dim as fiber.z
+    #fiber.alpha could be const. or array, result is same dimensionally
+    alpha = (fiber.alpha - gain)
+
+    #Define Dispersion operator: D = G + B, G = gain/loss, B = dispersion
+    G = -alpha/2 + 0j*alpha
+    B = 0
+    
+    #Dispersion components
+    for i in range(len(fiber.beta)):
+        B += (1j*fiber.beta[i]*omega**(i+2)/np.math.factorial(i+2))
+    
+    #Nonlinear operator, constant
+    N = 1j*fiber.gamma
+    
+    #Main propagation loop
+    At = pulse.At*np.exp(np.abs(pulse.At)**2*N*dz[0]/2)
+    for i in tqdm(range(nz-1),desc='Progagate Fiber',leave=False):
+        
+        D = G[i] + B
+       
+        Af = np.fft.ifft(At)
+        Af = Af*np.exp(D*dz[i])
+        At = np.fft.fft(Af)
+        At = At*np.exp(N*dz[i]*np.abs(At)**2)
+
+    #Final Propagation steps
+    Af = np.fft.ifft(At)
+    Af = Af*np.exp(D[-1]*dz[-1])
+    At = np.fft.fft(Af)
+    outputField = At*np.exp(np.abs(At)**2*N*dz[-1]/2)
+    
+    return outputField
     
     
 def calcZGrid(fiber,pulse, res = 'med'):
@@ -364,9 +477,11 @@ def calcZGrid(fiber,pulse, res = 'med'):
     return l_ref/n
     
     
-    
-
-def calcGain(fiber, Pp, Ps, pump_scheme = 'core', pump_dir = 'forward', method = 'simple'):
+def calcGain(fiber, Pp, Ps, 
+        pump_scheme = 'core', 
+        pump_dir = 'forward', 
+        method = 'simple', 
+        min_err=1E-4):
     '''
     Calculate steady state gain over fiber
     Output z-array of gain
@@ -443,7 +558,6 @@ def calcGain(fiber, Pp, Ps, pump_scheme = 'core', pump_dir = 'forward', method =
         c_gain = 0
         
         max_loops = 500
-        min_err = 1E-4
 
         while (loop_num < max_loops and gain_err > min_err):
 
@@ -625,99 +739,6 @@ def opticalFilter(pulse, filter_type, lambda0 = None, bandwidth = 2E-9, loss = 0
 
     return output_At
 
-
-def propagateFiber (pulse, fiber, autodz = False):
-    '''This function will propagate the input field along the length of...
-    a fibre with the given properties...
-
-    # Pulse propagation via Nonlinear Schrodinger Equation (NLSE)
-    # dA/dz = -ib2/2 (d^2A/dtau^2) + b3/6 (d^3 A/dtau^3) -aplha/2 + ig|A|^2*A  
-    # --> A is field A = sqrt(P0)*u
-
-    Requires a Pulse class object and Fiber class object. Fiber can also be FiberGain class
-
-    Inputs:
-    pulse = Pulse class object
-    fiber = Fiber class object (Fiber or FiberGain)
-    autodz = boolean to calculate fiber dz
-   
-    Outputs:
-    outputField = time domain output field, At
-    
-    Warning: setting autodz = True will modify fiber object!!!
-    autodz uses calcZGrid to calculate dz based on the input pulse and fiber
-    Should not be used for gain fiber!!!, since gain calc depends on dz as well
-    ''' 
-    if autodz == False:
-        pass
-    else:
-        if autodz is True:
-            res = 'med'
-        else:
-            try:
-                res = autodz//1
-            except TypeError:
-                res = 'med'
-
-        dz = calcZGrid(fiber,pulse,res)
-        fiber.initializeGrid(fiber.length, 'abs', dz)
-    
-    #Pulse inputs
-    #nt = pulse.nt
-    #tau = pulse.time
-    #dtau = pulse.dt
-    omega = pulse.freq
-
-    #fiber inputs
-    nz = np.size(fiber.z)
-    dz = np.gradient(fiber.z)   #position step size
-
-    #compile losses(alpha) and gain appropriately, result should have same dim as fiber.z
-    if type(fiber) is Fiber:
-        #Fiber does not have inherent gain parameter, thus gain is set to 0
-        gain = np.zeros(np.shape(fiber.z))
-    elif type(fiber) is FiberGain:
-        #FiberGain has gain parameter
-        #if fiber.gain is const, this creates a const arrray, if .gain is an array this is simply X 1
-        gain = np.ones(np.shape(fiber.z))*fiber.gain
-    else:
-        #Don't know when this would apply
-        gain = np.zeros(np.shape(fiber.z))
-
-    #combined loss and gain, will be array same dim as fiber.z
-    #fiber.alpha could be const. or array, result is same dimensionally
-    alpha = (fiber.alpha - gain)
-
-    #Define Dispersion operator: D = G + B, G = gain/loss, B = dispersion
-    G = -alpha/2 + 0j*alpha
-    B = 0
-    
-    #Dispersion components
-    for i in range(len(fiber.beta)):
-        B += (1j*fiber.beta[i]*omega**(i+2)/np.math.factorial(i+2))
-    
-    #Nonlinear operator, constant
-    N = 1j*fiber.gamma
-    
-    #Main propagation loop
-    At = pulse.At*np.exp(np.abs(pulse.At)**2*N*dz[0]/2)
-    for i in tqdm(range(nz-1),desc='Progagate Fiber',leave=False):
-        
-        D = G[i] + B
-       
-        Af = np.fft.ifft(At)
-        Af = Af*np.exp(D*dz[i])
-        At = np.fft.fft(Af)
-        At = At*np.exp(N*dz[i]*np.abs(At)**2)
-
-    #Final Propagation steps
-    Af = np.fft.ifft(At)
-    Af = Af*np.exp(D[-1]*dz[-1])
-    At = np.fft.fft(Af)
-    outputField = At*np.exp(np.abs(At)**2*N*dz[-1]/2)
-    
-    return outputField
-    
 
 def saturableAbs(pulse,sat_int,spot_size,mod_depth=1,loss=0):
     ''' Simulate saturable absorber.
