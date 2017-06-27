@@ -70,7 +70,8 @@ class Pulse:
     def getAf(self):
         return ((self.dt*self.nt)/(np.sqrt(2*np.pi)))*np.fft.ifft(self.At)
 
-    
+    def getPt(self):
+        return np.abs(self.At)**2
 
     def copyPulse(self, new_At = None):
         '''
