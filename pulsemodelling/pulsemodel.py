@@ -444,7 +444,7 @@ def propagateFiber (pulse, fiber, autodz = False):
     
     return outputField
     
-    
+
 def calcZGrid(fiber,pulse, res = 'med'):
     '''Autocalculation of zgrid of Fiber.
     fiber = class Fiber() or FiberGain() instance
@@ -464,7 +464,7 @@ def calcZGrid(fiber,pulse, res = 'med'):
     elif isinstance(res, int) or isinstance(res, float):
         n = res//1
     
-    if n==0:
+    if n<=0:
         n = 1
 
     _, t0 = rmswidth(pulse.time, np.abs(pulse.At))
