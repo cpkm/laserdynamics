@@ -599,8 +599,7 @@ def calcGain(fiber, Pp, Ps,
 
 def gratingPair(pulse, L, N, AOI, loss = 0, return_coef = False):
     '''
-    ***NEED TO FIX EQN's, theta not AOI*** see ettiene thesis and Backus 1998
-    Simulate grating pair
+    Simulate grating pair, double pass!
     pulse = input pulse object
     L = grating separation (m), use (-) L for stretcher, (+) L for compressor geometry
     N = lns/mm of gratings
