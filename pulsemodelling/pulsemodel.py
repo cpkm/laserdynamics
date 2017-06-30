@@ -58,7 +58,7 @@ class Pulse:
         self.At = None
         self.lambda0 = lambda0
 
-    def initializeGrid(self, t_bit_res, t_window):
+    def initializeGrid(self, t_bit_res= T_BIT_DEFAULT, t_window= T_WIN_DEFAULT):
         nt = 2**t_bit_res    #number of time steps, power of 2 for FFT
         dtau = 2*t_window/nt    #time step size
 
