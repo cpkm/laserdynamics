@@ -210,7 +210,7 @@ class FiberGain:
         self.lambdas = np.zeros(2)
 
         self.tau = 770E-6
-        self.N = 6.1813931E25
+        self.N = 1.891669E25    #see Nov. 24 Book 8 pg. 72
 
         self.core_d = self.CORE_D_DEFAULT
         self.clad_d = self.CLAD_D_DEFAULT
