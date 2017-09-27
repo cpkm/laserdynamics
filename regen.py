@@ -54,7 +54,6 @@ N = Nt*n 			inversion, real density
  '''
 
 import numpy as np
-import scipy as sp
 import scipy.integrate as integrate
 import matplotlib.pyplot as plt
 import sys
@@ -174,7 +173,6 @@ def rk4(f, x, y0, const_args = [], abs_x = False):
 	return y
 
 
-
 #constants
 h = 6.62606957E-34	#J*s
 c = 299792458.0		#m/s
@@ -215,7 +213,7 @@ z_N = np.size(z)
 
 #Beam parameters
 wp0 = 310.0E-6  		#pump beam radius, m
-zRp = 1.5E-3           #pump deam rayleigh parameter
+zRp = 1.5E-3           #pump beam rayleigh parameter
 z0p = z[np.int(z.size/2)] #focus of pump, midpoint of crystal
 ws = 108.5E-6  		#signal beam radius, m
 Pp_pump = 43.5373#50.7865#36.2881#58.0356#	#pump power (incident) in W
@@ -229,9 +227,9 @@ Fs_seed = Es_seed/(np.pi*ws**2)    #seed fluence
 
 
 #Temporal grid
-Frep = 5E3 		#target rep rate
-Ng = 120 		#number of round trips during amp
-Ncyc = 5  		#number of full pulse cycles
+Frep = 1E3 		#target rep rate
+Ng = 100 		#number of round trips during amp
+Ncyc = 2  		#number of full pulse cycles
 R = 100          #pumping cycle time multiplier
 
 dt = 2*d/c 		#roundtrip cavity time is the time step
@@ -283,17 +281,17 @@ n_out[:,0] = n.val
 G, gain_coeffs = calcGain(z, n.val)
 G_out[0] = G
 gainCoef_out[:,0] = gain_coeffs
-
+    
 
 #start of main loop
-for k in trange(Ncyc, desc='Overall'):
+bar=trange(Ncyc)
+for k in range(Ncyc):#tqdm(range(Ncyc), desc='Overall'):
 
     #low Q (pump only) phase    
     Ip_0 = Ip_pump[0]
     Fs_0 = 0
 
-    for j in trange(Np, desc='Low Q', leave=False):
-
+    for j in tqdm(range(Np), desc='Low Q', leave=False, mininterval=1):
         m = j + k*Nd
         
         #calculate pump/signal power
@@ -318,7 +316,7 @@ for k in trange(Ncyc, desc='Overall'):
     #high Q (amplification) phase            
     Fs_0 = Fs_seed
 
-    for i in trange(Ng, desc='High Q',leave=False):
+    for i in tqdm(range(Ng), desc='High Q',leave=False,mininterval=1):
 
         q = i + Np + k*Nd
         
@@ -356,7 +354,8 @@ for k in trange(Ncyc, desc='Overall'):
         
         G_out[q] = G
         gainCoef_out[:,q] = gain_coeffs
-
+    
+    bar.write('Finished cycle %i of %i' %(k+1,Ncyc))
 
 #end of main loop
 
@@ -366,7 +365,6 @@ cycle = np.arange(Ncyc)+1
 Fs_peak = Fs_out[-1,cycle*Nd - 1]
 Es_out = Fs_out[-1,]*(np.pi*ws**2)
 Es_peak = Fs_peak*(np.pi*ws**2)
-
 
 
 
