@@ -40,6 +40,16 @@ s_ep = 1.7623E-24;     %emission pump, m^2
 s_as = 0.0562E-24;     %abs signal, m^2
 s_es = 0.7634E-24;     %emi signal, m^2
 
+%create wavelength array for ase
+ase_lim = [1010,1040]*1E-9;
+lambda_ase = linspace(ase_lim(1), ase_lim(2),300);
+%calculate crosssection based on fits from nufern
+ase_em_coefs = [-0.0009083478128*1E18,1.86299326*1E9,-954.4494928];
+ase_ab_coefs = [-0.00002194150379*1E18,0.04204067705*1E9,-19.96593069];
+s_e_ase = polyval(ase_em_coefs,lambda_ase)*1E-24;
+s_a_ase = polyval(ase_ab_coefs,lambda_ase)*1E-24;
+
+
 tau_se = 770E-6;        %spontaneous emission lifetime, s, see Barnard 1994 j quant elec.
 
 dCore = 30E-6;           %core diameter (m)
