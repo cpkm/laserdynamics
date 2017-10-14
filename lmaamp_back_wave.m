@@ -43,12 +43,12 @@ s_es = 0.7634E-24;     %emi signal, m^2
 %create wavelength array for ase
 ase_lim = [1010,1040]*1E-9;
 lambda_ase = linspace(ase_lim(1), ase_lim(2),300);
+dl_ase = gradient(lambda_ase);
 %calculate crosssection based on fits from nufern
 ase_em_coefs = [-0.0009083478128*1E18,1.86299326*1E9,-954.4494928];
 ase_ab_coefs = [-0.00002194150379*1E18,0.04204067705*1E9,-19.96593069];
 s_e_ase = polyval(ase_em_coefs,lambda_ase)*1E-24;
 s_a_ase = polyval(ase_ab_coefs,lambda_ase)*1E-24;
-
 
 tau_se = 770E-6;        %spontaneous emission lifetime, s, see Barnard 1994 j quant elec.
 
@@ -100,34 +100,39 @@ I_0p = (P_pi:P_pi:P_pf)/Ap;          %Initial pump intensity, 10kW/cm^2 = 1E8 W/
 I_0s = (ESeed*FSeed)/As;                %total seed signal intensity
 
 dv_ase = 53E-9*(v_s/l_s);
-
-%DE's for light intensity
-dI_p = @(z,I_p,n2) (-Gp*(s_ap*N*(1-n2) - s_ep*N*n2) - alpha_p).*I_p;
-dI_sig = @(z,I_sig,n2) (-Gs*(s_as*N*(1-n2) - s_es*N*n2)).*I_sig;
-dI_ase = @(z,I_ase, n2) (-Gs*(s_as*N*(1-n2) - s_es*N*n2)).*I_ase + 2*Gs*n2*h*v_s*N*s_es*dv_ase/As;
-%note ASE has same DE, but z directions are different, this is implemented
-%below
-
     
 %Initialize parameters
 I_p = zeros(length(I_0p),length(z));        %pump intensity
 I_s = zeros(length(I_0p),length(z));        %combind signal intensity (signal, ase)
 I_sig = zeros(length(I_0p),length(z));      %singal (of interest) intensity
-I_asef = zeros(length(I_0p),length(z));     %forward ase intensity, also initial cond.
-I_aseb = zeros(length(I_0p),length(z));     %forward ase intensity, also initial cond.
+I_asef = zeros(length(I_0p),length(z),length(lambda_ase));     %forward ase intensity, also initial cond.
+I_aseb = zeros(length(I_0p),length(z),length(lambda_ase));     %backward ase intensity, also initial cond.
 n_2 = zeros(length(I_0p),length(z));        %excited state population
 dg = zeros(length(I_0p),length(z));         %gain contribution
 g = zeros(length(I_0p),length(z));          %gain coefficient
 G = zeros(length(I_0p),length(z));          %gain  
-a = 0;                                      %loss coeff. not currently used
+
+%arrays for cross sections
+s_e_ase_mat = repmat(s_e_ase, [length(I_0p),1]);
+s_a_ase_mat = repmat(s_a_ase, [length(I_0p),1]);
+dl_ase_mat = repmat(dl_ase, [length(I_0p),1]);
 
 %initial Pump/Signal conditions
 %backpumped fiber
 I_p(:,end) = I_0p;
 I_sig(:,1) = I_0s;
+
+%%%%NEED TO FIX n2 in DE's BELOW matrix dim mismatch!!!%%%
+%DE's for light intensity
+dI_p = @(z,I_p,n2) (-Gp*(s_ap*N*(1-n2) - s_ep*N*n2) - alpha_p).*I_p;
+dI_sig = @(z,I_sig,n2) (-Gs*(s_as*N*(1-n2) - s_es*N*n2)).*I_sig;
+dI_ase = @(z,I_ase, n2) (-Gs*(s_a_ase_mat*N*(1-n2) - s_e_ase_mat*N*n2)).*I_ase + 2*Gs*n2*h*c^2*N*s_e_ase_mat.*dl_ase_mat./(As*lambda_ase_mat.^3);
+%note ASE has same DE, but z directions are different, this is implemented
+%below
+
+
     
-    
-    %while-loop determinants
+%while-loop determinants
 j = 0;
 cGain = zeros(length(I_0p),1);
 errG = 1;
@@ -144,7 +149,7 @@ pGain = cGain;
 for i = 1:length(z)
 k = length(z) - i + 1;
 
-    I_s(:,i) = I_sig(:,i) + I_asef(:,i) + I_aseb(:,i);
+    I_s(:,i) = I_sig(:,i) + sum(I_asef(:,i,:),3) + sum(I_aseb(:,i,:),3);
     n_2(:,i) = (a_p*I_p(:,i) + a_s*I_s(:,i))./(b_p*I_p(:,i) + b_s*I_s(:,i) + 1/tau_se);
 
     if i<length(z)
@@ -164,18 +169,18 @@ k = length(z) - i + 1;
         I_sig(:,i+1) = I_sig(:,i) + (k1+2*k2+2*k3+k4)*dz/6;
         
         %update I_asef
-        k1 = dI_ase(z(i), I_asef(:,i), n_2(:,i));
-        k2 = dI_ase(z(i) + dz/2, I_asef(:,i) + k1*dz/2, n_2(:,i));
-        k3 = dI_ase(z(i) + dz/2, I_asef(:,i) + k2*dz/2, n_2(:,i));
-        k4 = dI_ase(z(i) + dz, I_asef(:,i) + k3*dz, n_2(:,i));
-        I_asef(:,i+1) = I_asef(:,i) + (k1+2*k2+2*k3+k4)*dz/6;
+        k1 = dI_ase(z(i), squeeze(I_asef(:,i,:)), n_2(:,i));
+        k2 = dI_ase(z(i) + dz/2, squeeze(I_asef(:,i,:)) + k1*dz/2, n_2(:,i));
+        k3 = dI_ase(z(i) + dz/2, squeeze(I_asef(:,i,:)) + k2*dz/2, n_2(:,i));
+        k4 = dI_ase(z(i) + dz, squeeze(I_asef(:,i,:)) + k3*dz, n_2(:,i));
+        I_asef(:,i+1,:) = squeeze(I_asef(:,i,:)) + (k1+2*k2+2*k3+k4)*dz/6;
         
         %update I_aseb
-        k1 = dI_ase(z(k), I_aseb(:,k), n_2(:,k));
-        k2 = dI_ase(z(k) + dz/2, I_aseb(:,k) + k1*dz/2, n_2(:,k));
-        k3 = dI_ase(z(k) + dz/2, I_aseb(:,k) + k2*dz/2, n_2(:,k));
-        k4 = dI_ase(z(k) + dz, I_aseb(:,k) + k3*dz, n_2(:,k));
-        I_aseb(:,k-1) = I_aseb(:,k) + (k1+2*k2+2*k3+k4)*dz/6;
+        k1 = dI_ase(z(k), squeeze(I_aseb(:,k,:)), n_2(:,k));
+        k2 = dI_ase(z(k) + dz/2, squeeze(I_aseb(:,k,:)) + k1*dz/2, n_2(:,k));
+        k3 = dI_ase(z(k) + dz/2, squeeze(I_aseb(:,k,:)) + k2*dz/2, n_2(:,k));
+        k4 = dI_ase(z(k) + dz, squeeze(I_aseb(:,k,:)) + k3*dz, n_2(:,k));
+        I_aseb(:,k-1,:) = squeeze(I_aseb(:,k,:)) + (k1+2*k2+2*k3+k4)*dz/6;
         
 
     end
