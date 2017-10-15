@@ -100,41 +100,44 @@ I_0p = (P_pi:P_pi:P_pf)/Ap;          %Initial pump intensity, 10kW/cm^2 = 1E8 W/
 I_0s = (ESeed*FSeed)/As;                %total seed signal intensity
 
 dv_ase = 53E-9*(v_s/l_s);
-    
+
 %Initialize parameters
-I_p = zeros(length(I_0p),length(z));        %pump intensity
-I_s = zeros(length(I_0p),length(z));        %combind signal intensity (signal, ase)
-I_sig = zeros(length(I_0p),length(z));      %singal (of interest) intensity
-I_asef = zeros(length(I_0p),length(z),length(lambda_ase));     %forward ase intensity, also initial cond.
-I_aseb = zeros(length(I_0p),length(z),length(lambda_ase));     %backward ase intensity, also initial cond.
-n_2 = zeros(length(I_0p),length(z));        %excited state population
-dg = zeros(length(I_0p),length(z));         %gain contribution
-g = zeros(length(I_0p),length(z));          %gain coefficient
-G = zeros(length(I_0p),length(z));          %gain  
+num_I = length(I_0p);
+num_z = length(z);
+num_l = length(lambda_ase);
+
+I_p = zeros(num_I,num_z);        %pump intensity
+I_s = zeros(num_I,num_z);        %combind signal intensity (signal, ase)
+I_sig = zeros(num_I,num_z);      %singal (of interest) intensity
+I_asef = zeros(num_I,num_z,num_l);     %forward ase intensity, also initial cond.
+I_aseb = zeros(num_I,num_z,num_l);     %backward ase intensity, also initial cond.
+n_2 = zeros(num_I,num_z);        %excited state population
+dg = zeros(num_I,num_z);         %gain contribution
+g = zeros(num_I,num_z);          %gain coefficient
+G = zeros(num_I,num_z);          %gain  
 
 %arrays for cross sections
-s_e_ase_mat = repmat(s_e_ase, [length(I_0p),1]);
-s_a_ase_mat = repmat(s_a_ase, [length(I_0p),1]);
-dl_ase_mat = repmat(dl_ase, [length(I_0p),1]);
+s_e_ase_mat = repmat(s_e_ase, [num_I,1]);
+s_a_ase_mat = repmat(s_a_ase, [num_I,1]);
+lambda_ase_mat = repmat(lambda_ase, [num_I,1]);
+dl_ase_mat = repmat(dl_ase, [num_I,1]);
 
 %initial Pump/Signal conditions
 %backpumped fiber
 I_p(:,end) = I_0p;
 I_sig(:,1) = I_0s;
 
-%%%%NEED TO FIX n2 in DE's BELOW matrix dim mismatch!!!%%%
 %DE's for light intensity
 dI_p = @(z,I_p,n2) (-Gp*(s_ap*N*(1-n2) - s_ep*N*n2) - alpha_p).*I_p;
 dI_sig = @(z,I_sig,n2) (-Gs*(s_as*N*(1-n2) - s_es*N*n2)).*I_sig;
-dI_ase = @(z,I_ase, n2) (-Gs*(s_a_ase_mat*N*(1-n2) - s_e_ase_mat*N*n2)).*I_ase + 2*Gs*n2*h*c^2*N*s_e_ase_mat.*dl_ase_mat./(As*lambda_ase_mat.^3);
+dI_ase = @(z,I_ase, n2) (-Gs.*(s_a_ase_mat.*N.*(1-n2) - s_e_ase_mat.*N.*n2)).*I_ase + 2.*Gs.*n2.*h.*c^2.*N.*s_e_ase_mat.*dl_ase_mat./(As*lambda_ase_mat.^3);
 %note ASE has same DE, but z directions are different, this is implemented
 %below
 
 
-    
 %while-loop determinants
 j = 0;
-cGain = zeros(length(I_0p),1);
+cGain = zeros(num_I,1);
 errG = 1;
 err = [];
     
@@ -146,13 +149,13 @@ pGain = cGain;
 
 %RK4 method
 %single-pass propagation    
-for i = 1:length(z)
-k = length(z) - i + 1;
+for i = 1:num_z
+k = num_z - i + 1;
 
     I_s(:,i) = I_sig(:,i) + sum(I_asef(:,i,:),3) + sum(I_aseb(:,i,:),3);
     n_2(:,i) = (a_p*I_p(:,i) + a_s*I_s(:,i))./(b_p*I_p(:,i) + b_s*I_s(:,i) + 1/tau_se);
 
-    if i<length(z)
+    if i<num_z
         
         %update I_p
         k1 = dI_p(z(k), I_p(:,k), n_2(:,k));
@@ -169,17 +172,17 @@ k = length(z) - i + 1;
         I_sig(:,i+1) = I_sig(:,i) + (k1+2*k2+2*k3+k4)*dz/6;
         
         %update I_asef
-        k1 = dI_ase(z(i), squeeze(I_asef(:,i,:)), n_2(:,i));
-        k2 = dI_ase(z(i) + dz/2, squeeze(I_asef(:,i,:)) + k1*dz/2, n_2(:,i));
-        k3 = dI_ase(z(i) + dz/2, squeeze(I_asef(:,i,:)) + k2*dz/2, n_2(:,i));
-        k4 = dI_ase(z(i) + dz, squeeze(I_asef(:,i,:)) + k3*dz, n_2(:,i));
+        k1 = dI_ase(z(i), squeeze(I_asef(:,i,:)), repmat(n_2(:,i),[1,num_l]));
+        k2 = dI_ase(z(i) + dz/2, squeeze(I_asef(:,i,:)) + k1*dz/2, repmat(n_2(:,i),[1,num_l]));
+        k3 = dI_ase(z(i) + dz/2, squeeze(I_asef(:,i,:)) + k2*dz/2, repmat(n_2(:,i),[1,num_l]));
+        k4 = dI_ase(z(i) + dz, squeeze(I_asef(:,i,:)) + k3*dz, repmat(n_2(:,i),[1,num_l]));
         I_asef(:,i+1,:) = squeeze(I_asef(:,i,:)) + (k1+2*k2+2*k3+k4)*dz/6;
         
         %update I_aseb
-        k1 = dI_ase(z(k), squeeze(I_aseb(:,k,:)), n_2(:,k));
-        k2 = dI_ase(z(k) + dz/2, squeeze(I_aseb(:,k,:)) + k1*dz/2, n_2(:,k));
-        k3 = dI_ase(z(k) + dz/2, squeeze(I_aseb(:,k,:)) + k2*dz/2, n_2(:,k));
-        k4 = dI_ase(z(k) + dz, squeeze(I_aseb(:,k,:)) + k3*dz, n_2(:,k));
+        k1 = dI_ase(z(k), squeeze(I_aseb(:,k,:)), repmat(n_2(:,k),[1,num_l]));
+        k2 = dI_ase(z(k) + dz/2, squeeze(I_aseb(:,k,:)) + k1*dz/2, repmat(n_2(:,k),[1,num_l]));
+        k3 = dI_ase(z(k) + dz/2, squeeze(I_aseb(:,k,:)) + k2*dz/2, repmat(n_2(:,k),[1,num_l]));
+        k4 = dI_ase(z(k) + dz, squeeze(I_aseb(:,k,:)) + k3*dz,repmat(n_2(:,k),[1,num_l]));
         I_aseb(:,k-1,:) = squeeze(I_aseb(:,k,:)) + (k1+2*k2+2*k3+k4)*dz/6;
         
 
@@ -219,7 +222,7 @@ scrsz = get(0,'ScreenSize');
 f = figure('Position',[1 scrsz(4) 2*scrsz(3)/3 2*scrsz(4)/3], 'Visible', 'off');
 
 figure(f)
-colors = hsv(length(I_0p));
+colors = hsv(num_I);
 set(gcf, 'Colormap', colors);
 
 
