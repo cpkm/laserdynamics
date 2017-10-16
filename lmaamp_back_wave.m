@@ -44,6 +44,7 @@ s_es = 0.7634E-24;     %emi signal, m^2
 ase_lim = [1010,1040]*1E-9;
 lambda_ase = linspace(ase_lim(1), ase_lim(2),300);
 dl_ase = gradient(lambda_ase);
+nu_ase = c./lambda_ase;
 %calculate crosssection based on fits from nufern
 ase_em_coefs = [-0.0009083478128*1E18,1.86299326*1E9,-954.4494928];
 ase_ab_coefs = [-0.00002194150379*1E18,0.04204067705*1E9,-19.96593069];
@@ -73,8 +74,10 @@ v_s = c/l_s;            %signal freq, Hz
 %calculated constants (see notebook 1, page , or equation below)
 b_p = (s_ap + s_ep)/(h*v_p);
 b_s = (s_as + s_es)/(h*v_s);
+b_ase = (s_a_ase + s_e_ase)./(h*nu_ase);
 a_p = s_ap/(h*v_p);
 a_s = s_as/(h*v_s);
+a_ase = s_a_ase./(h*nu_ase);
 
 
 %With these defined contsants, rate equation looks like
@@ -152,8 +155,11 @@ pGain = cGain;
 for i = 1:num_z
 k = num_z - i + 1;
 
-    I_s(:,i) = I_sig(:,i) + sum(I_asef(:,i,:),3) + sum(I_aseb(:,i,:),3);
-    n_2(:,i) = (a_p*I_p(:,i) + a_s*I_s(:,i))./(b_p*I_p(:,i) + b_s*I_s(:,i) + 1/tau_se);
+    %I_s(:,i) = I_sig(:,i) + sum(I_asef(:,i,:),3) + sum(I_aseb(:,i,:),3);
+    %n_2(:,i) = (a_p*I_p(:,i) + a_s*I_s(:,i))./(b_p*I_p(:,i) + b_s*I_s(:,i) + 1/tau_se);
+    
+    n_2(:,i) = (a_p*I_p(:,i) + a_s*I_sig(:,i) + sum(repmat(a_ase,[num_I,1]).*squeeze(I_asef(:,i,:)+I_aseb(:,i,:)),2))./...
+        (b_p*I_p(:,i) + b_s*I_s(:,i) + sum(repmat(b_ase,[num_I,1]).*squeeze(I_asef(:,i,:)+I_aseb(:,i,:)),2) + 1/tau_se);
 
     if i<num_z
         
