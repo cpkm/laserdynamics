@@ -33,6 +33,7 @@ L = 2;                  %m fiber length
 %N = 6.1815E25; %30.1*10^24;  %number density of doopant atoms, #/m^3
 abs_p = 5.10/(10/log(10));
 alpha_p = 0.1;          %additional pump loss
+alpha_s = 0.1;
 
 %cross sections, from Nufern file for Gen VIII fiber.
 s_ap = 1.7806E-24;     %absorption pump, m^2
@@ -91,7 +92,7 @@ dz = 0.002;                %spacial slice, 2mm
 z = 0:dz:L;
 
 P_pi = 5;        %lowest pump power (W)
-P_pf = 30;        %highest pump power (W)
+P_pf = 25;        %highest pump power (W)
 
 %s_ap = s_ap*(dCore/dClad)^2;
 %s_ep = s_ep*(dCore/dClad)^2;
@@ -132,7 +133,7 @@ I_sig(:,1) = I_0s;
 
 %DE's for light intensity
 dI_p = @(z,I_p,n2) (-Gp*(s_ap*N*(1-n2) - s_ep*N*n2) - alpha_p).*I_p;
-dI_sig = @(z,I_sig,n2) (-Gs*(s_as*N*(1-n2) - s_es*N*n2)).*I_sig;
+dI_sig = @(z,I_sig,n2) (-Gs*(s_as*N*(1-n2) - s_es*N*n2) - alpha_s).*I_sig;
 dI_ase = @(z,I_ase, n2) (-Gs.*(s_a_ase_mat.*N.*(1-n2) - s_e_ase_mat.*N.*n2)).*I_ase + 2.*Gs.*n2.*h.*c^2.*N.*s_e_ase_mat.*dl_ase_mat./(As*lambda_ase_mat.^3);
 %note ASE has same DE, but z directions are different, this is implemented
 %below
@@ -143,73 +144,90 @@ j = 0;
 cGain = zeros(num_I,1);
 errG = 1;
 err = [];
-    
-    
+loop_max = 100;
+gainerr_max = 1E-4;
+
 %Main loop
-while j < 400 && abs(errG) > 1E-12
+wb = waitbar(0, 'Performing iterations...');
 
-pGain = cGain;    
-
-%RK4 method
-%single-pass propagation    
-for i = 1:num_z
-k = num_z - i + 1;
-
-    %I_s(:,i) = I_sig(:,i) + sum(I_asef(:,i,:),3) + sum(I_aseb(:,i,:),3);
-    %n_2(:,i) = (a_p*I_p(:,i) + a_s*I_s(:,i))./(b_p*I_p(:,i) + b_s*I_s(:,i) + 1/tau_se);
+while j < loop_max && abs(errG) > gainerr_max
+    pGain = cGain;
     
-    n_2(:,i) = (a_p*I_p(:,i) + a_s*I_sig(:,i) + sum(repmat(a_ase,[num_I,1]).*squeeze(I_asef(:,i,:)+I_aseb(:,i,:)),2))./...
-        (b_p*I_p(:,i) + b_s*I_s(:,i) + sum(repmat(b_ase,[num_I,1]).*squeeze(I_asef(:,i,:)+I_aseb(:,i,:)),2) + 1/tau_se);
+    %RK4 method
+    %single-pass propagation
+    for i = 1:num_z
+        k = num_z - i + 1;
+        
+        %I_s(:,i) = I_sig(:,i) + sum(I_asef(:,i,:),3) + sum(I_aseb(:,i,:),3);
+        %n_2(:,i) = (a_p*I_p(:,i) + a_s*I_s(:,i))./(b_p*I_p(:,i) + b_s*I_s(:,i) + 1/tau_se);
+        
+        n_2(:,i) = (a_p*I_p(:,i) + a_s*I_sig(:,i) + sum(repmat(a_ase,[num_I,1]).*squeeze(I_asef(:,i,:)+I_aseb(:,i,:)),2))./...
+           (b_p*I_p(:,i) + b_s*I_sig(:,i) + sum(repmat(b_ase,[num_I,1]).*squeeze(I_asef(:,i,:)+I_aseb(:,i,:)),2) + 1/tau_se);
+        
+        n_2(:,k) = (a_p*I_p(:,k) + a_s*I_sig(:,k) + sum(repmat(a_ase,[num_I,1]).*squeeze(I_asef(:,k,:)+I_aseb(:,k,:)),2))./...
+            (b_p*I_p(:,k) + b_s*I_sig(:,k) + sum(repmat(b_ase,[num_I,1]).*squeeze(I_asef(:,k,:)+I_aseb(:,k,:)),2) + 1/tau_se);
+        
+        if i<num_z
+            
+            %update I_p
+            k1 = dI_p(z(k), I_p(:,k), n_2(:,k));
+            k2 = dI_p(z(k) + dz/2, I_p(:,k) + k1*dz/2, n_2(:,k));
+            k3 = dI_p(z(k) + dz/2, I_p(:,k) + k2*dz/2, n_2(:,k));
+            k4 = dI_p(z(k) + dz, I_p(:,k) + k3*dz, n_2(:,k));
+            I_p(:,k-1) = I_p(:,k) + (k1+2*k2+2*k3+k4)*dz/6;
+            
+            %update I_sig
+            k1 = dI_sig(z(i), I_sig(:,i), n_2(:,i));
+            k2 = dI_sig(z(i) + dz/2, I_sig(:,i) + k1*dz/2, n_2(:,i));
+            k3 = dI_sig(z(i) + dz/2, I_sig(:,i) + k2*dz/2, n_2(:,i));
+            k4 = dI_sig(z(i) + dz, I_sig(:,i) + k3*dz, n_2(:,i));
+            I_sig(:,i+1) = I_sig(:,i) + (k1+2*k2+2*k3+k4)*dz/6;
+            
+            %update I_asef
+            k1 = dI_ase(z(i), squeeze(I_asef(:,i,:)), repmat(n_2(:,i),[1,num_l]));
+            k2 = dI_ase(z(i) + dz/2, squeeze(I_asef(:,i,:)) + k1*dz/2, repmat(n_2(:,i),[1,num_l]));
+            k3 = dI_ase(z(i) + dz/2, squeeze(I_asef(:,i,:)) + k2*dz/2, repmat(n_2(:,i),[1,num_l]));
+            k4 = dI_ase(z(i) + dz, squeeze(I_asef(:,i,:)) + k3*dz, repmat(n_2(:,i),[1,num_l]));
+            I_asef(:,i+1,:) = squeeze(I_asef(:,i,:)) + (k1+2*k2+2*k3+k4)*dz/6;
+            
+            %update I_aseb
+            k1 = dI_ase(z(k), squeeze(I_aseb(:,k,:)), repmat(n_2(:,k),[1,num_l]));
+            k2 = dI_ase(z(k) + dz/2, squeeze(I_aseb(:,k,:)) + k1*dz/2, repmat(n_2(:,k),[1,num_l]));
+            k3 = dI_ase(z(k) + dz/2, squeeze(I_aseb(:,k,:)) + k2*dz/2, repmat(n_2(:,k),[1,num_l]));
+            k4 = dI_ase(z(k) + dz, squeeze(I_aseb(:,k,:)) + k3*dz,repmat(n_2(:,k),[1,num_l]));
+            I_aseb(:,k-1,:) = squeeze(I_aseb(:,k,:)) + (k1+2*k2+2*k3+k4)*dz/6;
+            
+            
+        end
+        
+        %single-pass gain
+%         g(:,k) = (s_es*N*n_2(:,k) - s_as*N*(1-n_2(:,k)));
+%         dg(:,k) = g(:,k)*dz;
+%         G(:,k) = exp(sum(dg(:,i:k),2));
+%         cGain = G(:,end);
 
-    if i<num_z
         
-        %update I_p
-        k1 = dI_p(z(k), I_p(:,k), n_2(:,k));
-        k2 = dI_p(z(k) + dz/2, I_p(:,k) + k1*dz/2, n_2(:,k));
-        k3 = dI_p(z(k) + dz/2, I_p(:,k) + k2*dz/2, n_2(:,k));
-        k4 = dI_p(z(k) + dz, I_p(:,k) + k3*dz, n_2(:,k));
-        I_p(:,k-1) = I_p(:,k) + (k1+2*k2+2*k3+k4)*dz/6;
-        
-        %update I_sig
-        k1 = dI_sig(z(i), I_sig(:,i), n_2(:,i));
-        k2 = dI_sig(z(i) + dz/2, I_sig(:,i) + k1*dz/2, n_2(:,i));
-        k3 = dI_sig(z(i) + dz/2, I_sig(:,i) + k2*dz/2, n_2(:,i));
-        k4 = dI_sig(z(i) + dz, I_sig(:,i) + k3*dz, n_2(:,i));
-        I_sig(:,i+1) = I_sig(:,i) + (k1+2*k2+2*k3+k4)*dz/6;
-        
-        %update I_asef
-        k1 = dI_ase(z(i), squeeze(I_asef(:,i,:)), repmat(n_2(:,i),[1,num_l]));
-        k2 = dI_ase(z(i) + dz/2, squeeze(I_asef(:,i,:)) + k1*dz/2, repmat(n_2(:,i),[1,num_l]));
-        k3 = dI_ase(z(i) + dz/2, squeeze(I_asef(:,i,:)) + k2*dz/2, repmat(n_2(:,i),[1,num_l]));
-        k4 = dI_ase(z(i) + dz, squeeze(I_asef(:,i,:)) + k3*dz, repmat(n_2(:,i),[1,num_l]));
-        I_asef(:,i+1,:) = squeeze(I_asef(:,i,:)) + (k1+2*k2+2*k3+k4)*dz/6;
-        
-        %update I_aseb
-        k1 = dI_ase(z(k), squeeze(I_aseb(:,k,:)), repmat(n_2(:,k),[1,num_l]));
-        k2 = dI_ase(z(k) + dz/2, squeeze(I_aseb(:,k,:)) + k1*dz/2, repmat(n_2(:,k),[1,num_l]));
-        k3 = dI_ase(z(k) + dz/2, squeeze(I_aseb(:,k,:)) + k2*dz/2, repmat(n_2(:,k),[1,num_l]));
-        k4 = dI_ase(z(k) + dz, squeeze(I_aseb(:,k,:)) + k3*dz,repmat(n_2(:,k),[1,num_l]));
-        I_aseb(:,k-1,:) = squeeze(I_aseb(:,k,:)) + (k1+2*k2+2*k3+k4)*dz/6;
-        
-
     end
     
-   %single-pass gain
-    g(:,i) = (s_es*N*n_2(:,i) - s_as*N*(1-n_2(:,i))); 
-    dg(:,i) = g(:,i)*dz;
-    G(:,i) = exp(sum(dg(:,1:i),2));
-    
+    g = s_es*N*n_2 - s_as*N*(1-n_2);
+    dg = g*dz;
+    G = exp(cumsum(dg,2));
     cGain = G(:,end);
     
+    errG = max(abs((cGain - pGain)./cGain));
+    err = [err, errG];
+    
+    j = j+1;
+    
+    waitbar(j/loop_max, wb,sprintf('Performing iterations... %d; Error = %4.3e', [j,errG]))
+    
+    if abs(errG) > 1E100
+        display('Error exceeds maximum; simulation terminated');
+        break
+    end
+    
 end
-
-errG = max(abs((cGain - pGain)./cGain));
-err = [err, errG];
-
-j = j+1;
-
-end
-
+close(wb)
 %display final loop count and err
 display(['Number of loops: ',num2str(j)]);
 display(['Gain error: ', num2str(errG)]);
