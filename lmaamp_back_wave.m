@@ -29,41 +29,21 @@ c = 299792458;          %m/s
 
 %parameters
 %crystal parameters
-L = 2;                  %m fiber length
+L = 1.7;                  %m fiber length
 %N = 6.1815E25; %30.1*10^24;  %number density of doopant atoms, #/m^3
-abs_p = 5.10/(10/log(10));
+abs_p = 6.0/(10/log(10));
 alpha_p = 0.1;          %additional pump loss
-alpha_s = 0.1;
+alpha_s = 1/(10/log(10));
 
 %cross sections, from Nufern file for Gen VIII fiber.
-s_ap = 1.7806E-24;     %absorption pump, m^2
-s_ep = 1.7623E-24;     %emission pump, m^2
-s_as = 0.0562E-24;     %abs signal, m^2
-s_es = 0.7634E-24;     %emi signal, m^2
+%s_ap = 1.7806E-24;     %absorption pump, m^2
+%s_ep = 1.7623E-24;     %emission pump, m^2
+%s_as = 0.0562E-24;     %abs signal, m^2
+%s_es = 0.7634E-24;     %emi signal, m^2
 
 %create wavelength array for ase
-ase_lim = [1010,1040]*1E-9;
-lambda_ase = linspace(ase_lim(1), ase_lim(2),300);
-dl_ase = gradient(lambda_ase);
-nu_ase = c./lambda_ase;
-%calculate crosssection based on fits from nufern
-ase_em_coefs = [-0.0009083478128*1E18,1.86299326*1E9,-954.4494928];
-ase_ab_coefs = [-0.00002194150379*1E18,0.04204067705*1E9,-19.96593069];
-s_e_ase = polyval(ase_em_coefs,lambda_ase)*1E-24;
-s_a_ase = polyval(ase_ab_coefs,lambda_ase)*1E-24;
-
-tau_se = 770E-6;        %spontaneous emission lifetime, s, see Barnard 1994 j quant elec.
-
-dCore = 30E-6;           %core diameter (m)
-dClad = 250E-6;
-MFA = pi*(dCore/2)^2;    %dopant mode field area, ~core size
-Ap = pi*(dClad/2)^2;
-As = pi*(dCore/2)^2;
-
-Gp = MFA/Ap;    %Pump overlap w 
-Gs = MFA/As;    %signal overlap
-
-N = (abs_p/s_ap)/Gp;
+%ase_lim = [1010,1040]*1E-9;
+%lambda_ase = linspace(ase_lim(1), ase_lim(2),300);
 
 %wavelengths
 l_p = 0.976E-6;         %pump wavelength, m
@@ -71,6 +51,47 @@ l_s = 1.030E-6;         %signal wavelength, m
 v_p = c/l_p;            %pump freq, Hz
 v_s = c/l_s;            %signal freq, Hz
 
+%import cross sections from file
+[folder, name, ext] = fileparts(which('lmaamp_back_wave.m'));
+M = csvread(fullfile(folder,'Nufern VIII.csv'),12,0);
+lambda_ase = M(:,1)'*1E-9;
+s_a_ase = M(:,2)'*1E-24;
+s_e_ase = M(:,3)'*1E-24;
+
+dl_ase = gradient(lambda_ase);
+nu_ase = c./lambda_ase;
+dnu_ase = gradient(nu_ase);
+
+s_a = interp1(lambda_ase,s_a_ase, [l_s,l_p]);
+s_e = interp1(lambda_ase,s_e_ase, [l_s,l_p]);
+s_as = s_a(1);
+s_ap = s_a(2);
+s_es = s_e(1);
+s_ep = s_e(2);
+
+ref_index = 1.447;
+NA_core = 0.06;
+
+tau_se = 1/((8*pi*ref_index^2/c^2)*trapz(-nu_ase,nu_ase.^2.*s_e_ase));
+
+%calculate crosssection based on fits from nufern
+% ase_em_coefs = [-0.0009083478128*1E18,1.86299326*1E9,-954.4494928];
+% ase_ab_coefs = [-0.00002194150379*1E18,0.04204067705*1E9,-19.96593069];
+% s_e_ase = polyval(ase_em_coefs,lambda_ase)*1E-24;
+% s_a_ase = polyval(ase_ab_coefs,lambda_ase)*1E-24;
+%tau_se = 770E-6;        %spontaneous emission lifetime, s, see Barnard 1994 j quant elec.
+
+dCore = 30E-6;           %core diameter (m)
+dClad = 250E-6;
+MFD = 21E-6;
+MFA = pi*(MFD/2)^2;    %dopant mode field area, ~estimate from NA
+Ap = pi*(dClad/2)^2;
+As = pi*(dCore/2)^2;
+
+Gp = MFA/Ap;    %Pump overlap w 
+Gs = MFA/As;    %signal overlap
+
+N = (abs_p/s_ap)/Gp;
 
 %calculated constants (see notebook 1, page , or equation below)
 b_p = (s_ap + s_ep)/(h*v_p);
@@ -98,9 +119,9 @@ P_pf = 25;        %highest pump power (W)
 %s_ep = s_ep*(dCore/dClad)^2;
 
 FSeed = 500E3; %in rep rate s^-1
-ESeed = 80E-9; % in J
+ESeed = 40E-9; % in J
 
-I_0p = (P_pi:P_pi:P_pf)/Ap;          %Initial pump intensity, 10kW/cm^2 = 1E8 W/m^2 --> 1W 6um core diameter ~3.5E10W/m^2
+I_0p = (P_pi:P_pi:P_pf)/Ap;          %Initial pump intensity
 I_0s = (ESeed*FSeed)/As;                %total seed signal intensity
 
 dv_ase = 53E-9*(v_s/l_s);
@@ -111,7 +132,6 @@ num_z = length(z);
 num_l = length(lambda_ase);
 
 I_p = zeros(num_I,num_z);        %pump intensity
-I_s = zeros(num_I,num_z);        %combind signal intensity (signal, ase)
 I_sig = zeros(num_I,num_z);      %singal (of interest) intensity
 I_asef = zeros(num_I,num_z,num_l);     %forward ase intensity, also initial cond.
 I_aseb = zeros(num_I,num_z,num_l);     %backward ase intensity, also initial cond.
@@ -145,7 +165,7 @@ cGain = zeros(num_I,1);
 errG = 1;
 err = [];
 loop_max = 100;
-gainerr_max = 1E-4;
+gainerr_max = 1E-3;
 
 %Main loop
 wb = waitbar(0, 'Performing iterations...');
@@ -209,10 +229,10 @@ while j < loop_max && abs(errG) > gainerr_max
         
     end
     
-    g = s_es*N*n_2 - s_as*N*(1-n_2);
+    g = Gs*(s_es*N*n_2 - s_as*N*(1-n_2));
     dg = g*dz;
-    G = exp(cumsum(dg,2));
-    cGain = G(:,end);
+    G = exp(sum(dg,2));
+    cGain = G;
     
     errG = max(abs((cGain - pGain)./cGain));
     err = [err, errG];
@@ -323,10 +343,13 @@ subplot(m,n,p)
 p=p+1;
 set(gca, 'ColorOrder', colors);
 hold on
-plot(I_0p*Ap, I_sig(:,end)*As)
+gaindB = 10*log10(I_sig(:,end)/I_0s);
+plotyy(I_0p*Ap, I_sig(:,end)*As,I_0p*Ap, gaindB)
 title('Pump Efficiency')
 xlabel('Pump power (W)')
 ylabel('Output power (W)')
+
+
 %annotation('textbox', [0.6,0.6,0.1,0.1],...
 %           'String', ['I_0 = ' num2str(I_p(1)/(1E7)) ' kW/cm^2']);
 hold off
