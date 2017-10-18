@@ -54,9 +54,9 @@ v_s = c/l_s;            %signal freq, Hz
 %import cross sections from file
 [folder, name, ext] = fileparts(which('lmaamp_back_wave.m'));
 M = csvread(fullfile(folder,'Nufern VIII.csv'),12,0);
-lambda_ase = M(:,1)'*1E-9;
-s_a_ase = M(:,2)'*1E-24;
-s_e_ase = M(:,3)'*1E-24;
+lambda_ase = M(:,1)'*1E-9;      %column 1, wavelength, nm
+s_a_ase = M(:,2)'*1E-24;        %column 2, abs cs, pm^2
+s_e_ase = M(:,3)'*1E-24;        %column 3, ems cs, pm^2
 
 dl_ase = gradient(lambda_ase);
 nu_ase = c./lambda_ase;
@@ -72,6 +72,7 @@ s_ep = s_e(2);
 ref_index = 1.447;
 NA_core = 0.06;
 
+%calculate spantaneous emission lifetime from cross section
 tau_se = 1/((8*pi*ref_index^2/c^2)*trapz(-nu_ase,nu_ase.^2.*s_e_ase));
 
 %calculate crosssection based on fits from nufern
@@ -82,16 +83,16 @@ tau_se = 1/((8*pi*ref_index^2/c^2)*trapz(-nu_ase,nu_ase.^2.*s_e_ase));
 %tau_se = 770E-6;        %spontaneous emission lifetime, s, see Barnard 1994 j quant elec.
 
 dCore = 30E-6;           %core diameter (m)
-dClad = 250E-6;
+dClad = 250E-6;          %clad diameter
 MFD = 21E-6;
 MFA = pi*(MFD/2)^2;    %dopant mode field area, ~estimate from NA
-Ap = pi*(dClad/2)^2;
-As = pi*(dCore/2)^2;
+Ap = pi*(dClad/2)^2;    %pump (clad) area
+As = pi*(dCore/2)^2;    %signal (core) area
 
-Gp = MFA/Ap;    %Pump overlap w 
+Gp = MFA/Ap;    %Pump overlap
 Gs = MFA/As;    %signal overlap
 
-N = (abs_p/s_ap)/Gp;
+N = (abs_p/s_ap)/(As/Ap);
 
 %calculated constants (see notebook 1, page , or equation below)
 b_p = (s_ap + s_ep)/(h*v_p);
@@ -119,12 +120,12 @@ P_pf = 25;        %highest pump power (W)
 %s_ep = s_ep*(dCore/dClad)^2;
 
 FSeed = 500E3; %in rep rate s^-1
-ESeed = 40E-9; % in J
+ESeed = 80E-9; % in J
 
 I_0p = (P_pi:P_pi:P_pf)/Ap;          %Initial pump intensity
 I_0s = (ESeed*FSeed)/As;                %total seed signal intensity
 
-dv_ase = 53E-9*(v_s/l_s);
+%dv_ase = 53E-9*(v_s/l_s);
 
 %Initialize parameters
 num_I = length(I_0p);
@@ -133,8 +134,8 @@ num_l = length(lambda_ase);
 
 I_p = zeros(num_I,num_z);        %pump intensity
 I_sig = zeros(num_I,num_z);      %singal (of interest) intensity
-I_asef = zeros(num_I,num_z,num_l);     %forward ase intensity, also initial cond.
-I_aseb = zeros(num_I,num_z,num_l);     %backward ase intensity, also initial cond.
+I_asef = zeros(num_I,num_l,num_z);     %forward ase intensity, also initial cond.
+I_aseb = zeros(num_I,num_l,num_z);     %backward ase intensity, also initial cond.
 n_2 = zeros(num_I,num_z);        %excited state population
 dg = zeros(num_I,num_z);         %gain contribution
 g = zeros(num_I,num_z);          %gain coefficient
@@ -181,11 +182,11 @@ while j < loop_max && abs(errG) > gainerr_max
         %I_s(:,i) = I_sig(:,i) + sum(I_asef(:,i,:),3) + sum(I_aseb(:,i,:),3);
         %n_2(:,i) = (a_p*I_p(:,i) + a_s*I_s(:,i))./(b_p*I_p(:,i) + b_s*I_s(:,i) + 1/tau_se);
         
-        n_2(:,i) = (a_p*I_p(:,i) + a_s*I_sig(:,i) + sum(repmat(a_ase,[num_I,1]).*squeeze(I_asef(:,i,:)+I_aseb(:,i,:)),2))./...
-           (b_p*I_p(:,i) + b_s*I_sig(:,i) + sum(repmat(b_ase,[num_I,1]).*squeeze(I_asef(:,i,:)+I_aseb(:,i,:)),2) + 1/tau_se);
+        n_2(:,i) = ((Gp*Ap)*a_p*I_p(:,i) + (Gs*As)*a_s*I_sig(:,i) + (Gs*As)*sum(repmat(a_ase,[num_I,1]).*(I_asef(:,:,i)+I_aseb(:,:,i)),2))./...
+           ((Gp*Ap)*b_p*I_p(:,i) + (Gs*As)*b_s*I_sig(:,i) + (Gs*As)*sum(repmat(b_ase,[num_I,1]).*(I_asef(:,:,i)+I_aseb(:,:,i)),2) + As/tau_se);
         
-        n_2(:,k) = (a_p*I_p(:,k) + a_s*I_sig(:,k) + sum(repmat(a_ase,[num_I,1]).*squeeze(I_asef(:,k,:)+I_aseb(:,k,:)),2))./...
-            (b_p*I_p(:,k) + b_s*I_sig(:,k) + sum(repmat(b_ase,[num_I,1]).*squeeze(I_asef(:,k,:)+I_aseb(:,k,:)),2) + 1/tau_se);
+        n_2(:,k) = ((Gp*Ap)*a_p*I_p(:,k) + (Gs*As)*a_s*I_sig(:,k) + (Gs*As)*sum(repmat(a_ase,[num_I,1]).*(I_asef(:,:,k)+I_aseb(:,:,k)),2))./...
+            ((Gp*Ap)*b_p*I_p(:,k) + (Gs*As)*b_s*I_sig(:,k) + (Gs*As)*sum(repmat(b_ase,[num_I,1]).*(I_asef(:,:,k)+I_aseb(:,:,k)),2) + As/tau_se);
         
         if i<num_z
             
@@ -204,18 +205,18 @@ while j < loop_max && abs(errG) > gainerr_max
             I_sig(:,i+1) = I_sig(:,i) + (k1+2*k2+2*k3+k4)*dz/6;
             
             %update I_asef
-            k1 = dI_ase(z(i), squeeze(I_asef(:,i,:)), repmat(n_2(:,i),[1,num_l]));
-            k2 = dI_ase(z(i) + dz/2, squeeze(I_asef(:,i,:)) + k1*dz/2, repmat(n_2(:,i),[1,num_l]));
-            k3 = dI_ase(z(i) + dz/2, squeeze(I_asef(:,i,:)) + k2*dz/2, repmat(n_2(:,i),[1,num_l]));
-            k4 = dI_ase(z(i) + dz, squeeze(I_asef(:,i,:)) + k3*dz, repmat(n_2(:,i),[1,num_l]));
-            I_asef(:,i+1,:) = squeeze(I_asef(:,i,:)) + (k1+2*k2+2*k3+k4)*dz/6;
+            k1 = dI_ase(z(i), (I_asef(:,:,i)), repmat(n_2(:,i),[1,num_l]));
+            k2 = dI_ase(z(i) + dz/2, (I_asef(:,:,i)) + k1*dz/2, repmat(n_2(:,i),[1,num_l]));
+            k3 = dI_ase(z(i) + dz/2, (I_asef(:,:,i)) + k2*dz/2, repmat(n_2(:,i),[1,num_l]));
+            k4 = dI_ase(z(i) + dz, (I_asef(:,:,i)) + k3*dz, repmat(n_2(:,i),[1,num_l]));
+            I_asef(:,:,i+1) = (I_asef(:,:,i)) + (k1+2*k2+2*k3+k4)*dz/6;
             
             %update I_aseb
-            k1 = dI_ase(z(k), squeeze(I_aseb(:,k,:)), repmat(n_2(:,k),[1,num_l]));
-            k2 = dI_ase(z(k) + dz/2, squeeze(I_aseb(:,k,:)) + k1*dz/2, repmat(n_2(:,k),[1,num_l]));
-            k3 = dI_ase(z(k) + dz/2, squeeze(I_aseb(:,k,:)) + k2*dz/2, repmat(n_2(:,k),[1,num_l]));
-            k4 = dI_ase(z(k) + dz, squeeze(I_aseb(:,k,:)) + k3*dz,repmat(n_2(:,k),[1,num_l]));
-            I_aseb(:,k-1,:) = squeeze(I_aseb(:,k,:)) + (k1+2*k2+2*k3+k4)*dz/6;
+            k1 = dI_ase(z(k), (I_aseb(:,:,k)), repmat(n_2(:,k),[1,num_l]));
+            k2 = dI_ase(z(k) + dz/2, (I_aseb(:,:,k)) + k1*dz/2, repmat(n_2(:,k),[1,num_l]));
+            k3 = dI_ase(z(k) + dz/2, (I_aseb(:,:,k)) + k2*dz/2, repmat(n_2(:,k),[1,num_l]));
+            k4 = dI_ase(z(k) + dz, (I_aseb(:,:,k)) + k3*dz,repmat(n_2(:,k),[1,num_l]));
+            I_aseb(:,:,k-1) = (I_aseb(:,:,k)) + (k1+2*k2+2*k3+k4)*dz/6;
             
             
         end
@@ -303,8 +304,8 @@ subplot(m,n,p)
 p=p+1;
 set(gca, 'ColorOrder', colors);
 hold on
-plot(z, As*sum(I_asef,3), '-')
-plot(z, As*sum(I_aseb,3), '-.')
+plot(z, As*squeeze(sum(I_asef,2)), '-')
+plot(z, As*squeeze(sum(I_aseb,2)), '-.')
 title('ASE Signal intensity')
 xlabel('Position along fiber (m)')
 ylabel('ASE Signal Power (W)')
